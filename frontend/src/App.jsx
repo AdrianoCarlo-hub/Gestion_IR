@@ -4,6 +4,7 @@ import ProtectedRoute from './components/ProtectedRoute';
 import Layout from './components/Layout';
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
+import Contribuables from './pages/Contribuables';
 
 function Placeholder({ title }) {
   return (
@@ -30,7 +31,7 @@ export default function App() {
             }
           >
             <Route path="/dashboard" element={<Dashboard />} />
-            <Route path="/contribuables" element={<Placeholder title="Contribuables" />} />
+            <Route path="/contribuables" element={<Contribuables />} />
             <Route path="/declarations" element={<Placeholder title="Declarations IR" />} />
             <Route path="/deficits" element={<Placeholder title="Deficits" />} />
             <Route path="/acomptes" element={<Placeholder title="Acomptes" />} />
