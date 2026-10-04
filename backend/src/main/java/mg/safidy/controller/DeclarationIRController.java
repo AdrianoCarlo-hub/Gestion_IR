@@ -3,6 +3,7 @@ package mg.safidy.controller;
 import mg.safidy.model.DeclarationIR;
 import mg.safidy.model.LigneCharge;
 import mg.safidy.service.DeclarationIRService;
+import mg.safidy.config.AuditLogger;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -16,9 +17,11 @@ import java.util.Map;
 public class DeclarationIRController {
 
     private final DeclarationIRService service;
+    private final AuditLogger audit;
 
-    public DeclarationIRController(DeclarationIRService service) {
+    public DeclarationIRController(DeclarationIRService service, AuditLogger audit) {
         this.service = service;
+        this.audit = audit;
     }
 
     @GetMapping
@@ -80,12 +83,17 @@ public class DeclarationIRController {
                 : Long.valueOf(body.get("totalDeductions").toString());
         Long acomptes = body.get("acomptesVerses") == null ? 0L
                 : Long.valueOf(body.get("acomptesVerses").toString());
-        return ResponseEntity.ok(service.calculerEtEnregistrer(id, reintegrations, deductions, acomptes));
+        DeclarationIR saved = service.calculerEtEnregistrer(id, reintegrations, deductions, acomptes);
+        audit.log("CALCUL_IR", "declaration_ir", id, "IR du=" + saved.getIrDu() + " Ar");
+        return ResponseEntity.ok(saved);
     }
 
     @PostMapping("/{id}/valider")
     public ResponseEntity<DeclarationIR> valider(@PathVariable Long id) {
-        return ResponseEntity.ok(service.valider(id));
+        DeclarationIR saved = service.valider(id);
+        audit.log("VALIDATION_DECLARATION", "declaration_ir", id,
+                  "IR du=" + saved.getIrDu() + " Ar");
+        return ResponseEntity.ok(saved);
     }
 
     @PostMapping("/{id}/marquer-payee")

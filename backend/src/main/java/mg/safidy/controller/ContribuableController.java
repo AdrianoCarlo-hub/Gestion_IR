@@ -1,5 +1,6 @@
 package mg.safidy.controller;
 
+import mg.safidy.config.AuditLogger;
 import mg.safidy.model.Contribuable;
 import mg.safidy.service.ContribuableService;
 import org.springframework.http.ResponseEntity;
@@ -12,9 +13,11 @@ import java.util.List;
 public class ContribuableController {
 
     private final ContribuableService service;
+    private final AuditLogger audit;
 
-    public ContribuableController(ContribuableService service) {
+    public ContribuableController(ContribuableService service, AuditLogger audit) {
         this.service = service;
+        this.audit = audit;
     }
 
     @GetMapping
@@ -37,18 +40,25 @@ public class ContribuableController {
 
     @PostMapping
     public ResponseEntity<Contribuable> creer(@RequestBody Contribuable c) {
-        return ResponseEntity.ok(service.creer(c));
+        Contribuable saved = service.creer(c);
+        audit.log("CREATION_CONTRIBUABLE", "contribuable", saved.getIdContribuable(),
+                  "NIF=" + saved.getNif() + " raison=" + saved.getRaisonSociale());
+        return ResponseEntity.ok(saved);
     }
 
     @PutMapping("/{id}")
     public ResponseEntity<Contribuable> modifier(@PathVariable Long id,
                                                    @RequestBody Contribuable c) {
-        return ResponseEntity.ok(service.modifier(id, c));
+        Contribuable saved = service.modifier(id, c);
+        audit.log("MODIFICATION_CONTRIBUABLE", "contribuable", id, "NIF=" + saved.getNif());
+        return ResponseEntity.ok(saved);
     }
 
     @PatchMapping("/{id}/statut")
     public ResponseEntity<Contribuable> changerStatut(@PathVariable Long id,
                                                        @RequestParam String statut) {
-        return ResponseEntity.ok(service.changerStatut(id, statut));
+        Contribuable saved = service.changerStatut(id, statut);
+        audit.log("CHANGEMENT_STATUT", "contribuable", id, "nouveau statut=" + statut);
+        return ResponseEntity.ok(saved);
     }
 }

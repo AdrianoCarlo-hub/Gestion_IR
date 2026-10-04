@@ -2,6 +2,7 @@ package mg.safidy.controller;
 
 import mg.safidy.model.Paiement;
 import mg.safidy.service.PaiementService;
+import mg.safidy.config.AuditLogger;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -14,9 +15,11 @@ import java.util.Map;
 public class PaiementController {
 
     private final PaiementService service;
+    private final AuditLogger audit;
 
-    public PaiementController(PaiementService service) {
+    public PaiementController(PaiementService service, AuditLogger audit) {
         this.service = service;
+        this.audit = audit;
     }
 
     @GetMapping
@@ -47,13 +50,18 @@ public class PaiementController {
         String mode = body.get("mode").toString();
         Long idAgent = Long.valueOf(body.get("idAgent").toString());
 
-        return ResponseEntity.ok(service.enregistrer(idContribuable, idDeclaration, idAcompte,
-                type, montant, date, mode, idAgent));
+        Paiement p = service.enregistrer(idContribuable, idDeclaration, idAcompte,
+                type, montant, date, mode, idAgent);
+        audit.log("ENREGISTREMENT_PAIEMENT", "paiement", p.getIdPaiement(),
+                  "Quittance=" + p.getReferenceQuittance() + " Montant=" + montant + " Ar");
+        return ResponseEntity.ok(p);
     }
 
     @PostMapping("/{id}/annuler")
     public ResponseEntity<Paiement> annuler(@PathVariable Long id,
                                              @RequestBody Map<String, String> body) {
-        return ResponseEntity.ok(service.annuler(id, body.get("motif")));
+        Paiement p = service.annuler(id, body.get("motif"));
+        audit.log("ANNULATION_PAIEMENT", "paiement", id, "Motif=" + body.get("motif"));
+        return ResponseEntity.ok(p);
     }
 }
