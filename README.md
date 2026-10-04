@@ -1,4 +1,4 @@
-# Safidy - Fiscal-Track
+# Safidy
 
 Application Web de Gestion et de Suivi de l'Impot sur le Revenu (IR)
 au sein d'un Centre Fiscal a Madagascar.
