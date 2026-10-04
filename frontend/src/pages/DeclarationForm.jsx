@@ -1,5 +1,8 @@
 import { useEffect, useState } from 'react';
 import * as service from '../services/declarationService';
+import ConfirmDialog from '../components/ConfirmDialog';
+import { LoadingBlock } from '../components/Spinner';
+import { useToast } from '../context/ToastContext';
 
 const fmt = (n) =>
   n == null ? '0' : Number(n).toLocaleString('fr-FR').replace(/\u202f|\u00a0/g, ' ');
@@ -13,6 +16,8 @@ const CATEGORIES = [
 ];
 
 export default function DeclarationForm({ idDeclaration, onRetour }) {
+  const toast = useToast();
+  const [confirm, setConfirm] = useState(null);
   const [declaration, setDeclaration] = useState(null);
   const [charges, setCharges] = useState([]);
   const [caHt, setCaHt] = useState(0);
@@ -25,7 +30,6 @@ export default function DeclarationForm({ idDeclaration, onRetour }) {
   const [newJustif, setNewJustif] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [success, setSuccess] = useState('');
 
   const charger = async () => {
     try {
@@ -53,10 +57,10 @@ export default function DeclarationForm({ idDeclaration, onRetour }) {
     setError('');
     try {
       await service.modifierCaHt(idDeclaration, Number(caHt));
-      setSuccess('Chiffre d affaires enregistre');
+      toast.success('Chiffre d affaires enregistre');
       charger();
     } catch (e) {
-      setError(e.response?.data?.message || 'Erreur');
+      toast.error(e.response?.data?.message || 'Erreur');
     }
   };
 
@@ -77,26 +81,33 @@ export default function DeclarationForm({ idDeclaration, onRetour }) {
       setNewLib('');
       setNewMontant('');
       setNewJustif('');
-      setSuccess('Charge ajoutee');
+      toast.success('Charge ajoutee');
       charger();
     } catch (e) {
-      setError(e.response?.data?.message || 'Erreur');
+      toast.error(e.response?.data?.message || 'Erreur');
     }
   };
 
-  const handleSupprimerCharge = async (idLigne) => {
-    if (!confirm('Supprimer cette charge ?')) return;
-    try {
-      await service.supprimerCharge(idLigne);
-      charger();
-    } catch (e) {
-      setError(e.response?.data?.message || 'Erreur');
-    }
+  const handleSupprimerCharge = (idLigne) => {
+    setConfirm({
+      titre: 'Supprimer la charge',
+      message: 'Voulez-vous vraiment supprimer cette charge ?',
+      texteConfirmer: 'Supprimer',
+      danger: true,
+      onConfirmer: async () => {
+        try {
+          await service.supprimerCharge(idLigne);
+          toast.success('Charge supprimee');
+          charger();
+        } catch (e) {
+          toast.error(e.response?.data?.message || 'Erreur');
+        }
+      },
+    });
   };
 
   const handleCalculer = async () => {
     setError('');
-    setSuccess('');
     setLoading(true);
     try {
       await service.modifierCaHt(idDeclaration, Number(caHt));
@@ -106,28 +117,33 @@ export default function DeclarationForm({ idDeclaration, onRetour }) {
         acomptesVerses: Number(acomptes),
       });
       setDeclaration(d);
-      setSuccess('Calcul effectue avec succes');
+      toast.success('Calcul effectue avec succes');
     } catch (e) {
-      setError(e.response?.data?.message || 'Erreur de calcul');
+      toast.error(e.response?.data?.message || 'Erreur de calcul');
     } finally {
       setLoading(false);
     }
   };
 
-  const handleValider = async () => {
-    if (!confirm('Valider cette declaration ? Les acomptes de l annee suivante seront generes.')) return;
-    setError('');
-    try {
-      const d = await service.valider(idDeclaration);
-      setDeclaration(d);
-      setSuccess('Declaration validee. Acomptes generes pour l annee suivante.');
-    } catch (e) {
-      setError(e.response?.data?.message || 'Erreur');
-    }
+  const handleValider = () => {
+    setConfirm({
+      titre: 'Valider la declaration',
+      message: 'Valider cette declaration ? Les acomptes de l annee suivante seront generes.',
+      texteConfirmer: 'Valider',
+      onConfirmer: async () => {
+        try {
+          const d = await service.valider(idDeclaration);
+          setDeclaration(d);
+          toast.success('Declaration validee. Acomptes generes.');
+        } catch (e) {
+          toast.error(e.response?.data?.message || 'Erreur');
+        }
+      },
+    });
   };
 
   if (!declaration) {
-    return <p>Chargement...</p>;
+    return <LoadingBlock message="Chargement de la declaration..." />;
   }
 
   const totalChargesAffiche = charges.reduce((s, c) => s + (c.montantAr || 0), 0);
@@ -150,7 +166,6 @@ export default function DeclarationForm({ idDeclaration, onRetour }) {
       </div>
 
       {error && <div className="alert-error" style={{ marginBottom: 16 }}>{error}</div>}
-      {success && <div className="alert-success" style={{ marginBottom: 16 }}>{success}</div>}
 
       {verrouille && (
         <div className="alert-warning" style={{ marginBottom: 16 }}>
@@ -370,6 +385,19 @@ export default function DeclarationForm({ idDeclaration, onRetour }) {
           )}
         </div>
       </div>
+
+      <ConfirmDialog
+        ouvert={!!confirm}
+        titre={confirm ? confirm.titre : 'Confirmation'}
+        message={confirm ? confirm.message : ''}
+        texteConfirmer={confirm ? confirm.texteConfirmer : 'Confirmer'}
+        danger={confirm ? !!confirm.danger : false}
+        onConfirmer={() => {
+          if (confirm && confirm.onConfirmer) confirm.onConfirmer();
+          setConfirm(null);
+        }}
+        onAnnuler={() => setConfirm(null)}
+      />
     </>
   );
 }

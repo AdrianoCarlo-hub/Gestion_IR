@@ -2,16 +2,19 @@ import { useEffect, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { lister as listerContribuables } from '../services/contribuableService';
 import * as service from '../services/suspensionService';
+import ConfirmDialog from '../components/ConfirmDialog';
+import { useToast } from '../context/ToastContext';
 
 const today = new Date().toISOString().slice(0, 10);
 
 export default function Suspensions() {
   const { agent } = useAuth();
+  const toast = useToast();
+  const [confirm, setConfirm] = useState(null);
   const [contribuables, setContribuables] = useState([]);
   const [selected, setSelected] = useState('');
   const [historique, setHistorique] = useState([]);
   const [error, setError] = useState('');
-  const [success, setSuccess] = useState('');
   const [formArret, setFormArret] = useState({ dateArret: today, motif: 'MANQUE_ACTIVITE', refDeclaration: '' });
   const [formReprise, setFormReprise] = useState({ dateReprise: today });
 
@@ -30,50 +33,57 @@ export default function Suspensions() {
 
   useEffect(() => {
     if (selected) charger(selected);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selected]);
 
   const handleArret = async (e) => {
     e.preventDefault();
     setError('');
-    setSuccess('');
     try {
       await service.declarerArret({
         idContribuable: Number(selected),
         dateArret: formArret.dateArret,
         motif: formArret.motif,
         refDeclaration: formArret.refDeclaration || null,
-        idAgent: agent?.idAgent || 3,
+        idAgent: agent ? agent.idAgent : 3,
       });
-      setSuccess('Arret enregistre');
+      toast.success('Arret enregistre');
       charger(selected);
     } catch (err) {
-      setError(err.response?.data?.message || 'Erreur');
+      toast.error(err.response?.data?.message || 'Erreur');
     }
   };
 
   const handleReprise = async (idSuspension) => {
     setError('');
-    setSuccess('');
     try {
       await service.declarerReprise(idSuspension, {
         dateReprise: formReprise.dateReprise,
-        idAgent: agent?.idAgent || 3,
+        idAgent: agent ? agent.idAgent : 3,
       });
-      setSuccess('Reprise enregistree');
+      toast.success('Reprise enregistree');
       charger(selected);
     } catch (err) {
-      setError(err.response?.data?.message || 'Erreur');
+      toast.error(err.response?.data?.message || 'Erreur');
     }
   };
 
-  const handleAnnuler = async (id) => {
-    if (!confirm('Annuler cette suspension ?')) return;
-    try {
-      await service.annuler(id);
-      charger(selected);
-    } catch (err) {
-      setError(err.response?.data?.message || 'Erreur');
-    }
+  const handleAnnuler = (id) => {
+    setConfirm({
+      titre: 'Annuler la suspension',
+      message: 'Annuler cette suspension ?',
+      texteConfirmer: 'Annuler',
+      danger: true,
+      onConfirmer: async () => {
+        try {
+          await service.annuler(id);
+          toast.success('Suspension annulee');
+          charger(selected);
+        } catch (err) {
+          toast.error(err.response?.data?.message || 'Erreur');
+        }
+      },
+    });
   };
 
   const enCours = historique.find((h) => h.statut === 'EN_COURS');
@@ -86,7 +96,6 @@ export default function Suspensions() {
       </header>
 
       {error && <div className="alert-error" style={{ marginBottom: 16 }}>{error}</div>}
-      {success && <div className="alert-success" style={{ marginBottom: 16 }}>{success}</div>}
 
       <div className="form-panel" style={{ marginBottom: 16 }}>
         <label className="form-label">Contribuable</label>
@@ -121,7 +130,7 @@ export default function Suspensions() {
               </select>
             </div>
             <div className="form-group">
-              <label className="form-label">N° declaration ecrite</label>
+              <label className="form-label">N declaration ecrite</label>
               <input className="form-input" value={formArret.refDeclaration}
                      onChange={(e) => setFormArret({ ...formArret, refDeclaration: e.target.value })} />
             </div>
@@ -182,6 +191,19 @@ export default function Suspensions() {
           </table>
         </div>
       )}
+
+      <ConfirmDialog
+        ouvert={!!confirm}
+        titre={confirm ? confirm.titre : 'Confirmation'}
+        message={confirm ? confirm.message : ''}
+        texteConfirmer={confirm ? confirm.texteConfirmer : 'Confirmer'}
+        danger={confirm ? !!confirm.danger : false}
+        onConfirmer={() => {
+          if (confirm && confirm.onConfirmer) confirm.onConfirmer();
+          setConfirm(null);
+        }}
+        onAnnuler={() => setConfirm(null)}
+      />
     </div>
   );
 }

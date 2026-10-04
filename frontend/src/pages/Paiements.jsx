@@ -3,18 +3,22 @@ import { useAuth } from '../context/AuthContext';
 import { lister as listerContribuables } from '../services/contribuableService';
 import { lister as listerDeclarations } from '../services/declarationService';
 import * as service from '../services/paiementService';
+import * as exportService from '../services/exportService';
+import ConfirmDialog from '../components/ConfirmDialog';
+import { useToast } from '../context/ToastContext';
 
 const fmt = (n) => (n == null ? '0' : Number(n).toLocaleString('fr-FR').replace(/\u202f|\u00a0/g, ' '));
 const today = new Date().toISOString().slice(0, 10);
 
 export default function Paiements() {
   const { agent } = useAuth();
+  const toast = useToast();
+  const [confirm, setConfirm] = useState(null);
   const [liste, setListe] = useState([]);
   const [contribuables, setContribuables] = useState([]);
   const [declarations, setDeclarations] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [success, setSuccess] = useState('');
   const [showForm, setShowForm] = useState(false);
 
   const [form, setForm] = useState({
@@ -49,7 +53,6 @@ export default function Paiements() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
-    setSuccess('');
     try {
       const payload = {
         idContribuable: Number(form.idContribuable),
@@ -58,27 +61,34 @@ export default function Paiements() {
         montantAr: Number(form.montantAr),
         datePaiement: form.datePaiement,
         mode: form.mode,
-        idAgent: agent?.idAgent || 3,
+        idAgent: agent ? agent.idAgent : 3,
       };
       await service.enregistrer(payload);
-      setSuccess('Paiement enregistre');
+      toast.success('Paiement enregistre');
       setShowForm(false);
       setForm({ ...form, montantAr: '', idDeclaration: '' });
       charger();
     } catch (err) {
-      setError(err.response?.data?.message || 'Erreur');
+      toast.error(err.response?.data?.message || 'Erreur');
     }
   };
 
-  const handleAnnuler = async (id) => {
-    const motif = prompt('Motif de l annulation ?');
-    if (!motif) return;
-    try {
-      await service.annuler(id, motif);
-      charger();
-    } catch (e) {
-      setError(e.response?.data?.message || 'Erreur');
-    }
+  const handleAnnuler = (id) => {
+    setConfirm({
+      titre: 'Annuler le paiement',
+      message: 'Voulez-vous vraiment annuler ce paiement ? Cette action est irreversible.',
+      texteConfirmer: 'Annuler le paiement',
+      danger: true,
+      onConfirmer: async () => {
+        try {
+          await service.annuler(id, 'Annulation manuelle');
+          toast.success('Paiement annule');
+          charger();
+        } catch (e) {
+          toast.error(e.response?.data?.message || 'Erreur');
+        }
+      },
+    });
   };
 
   const declarationsDuContribuable = declarations.filter(
@@ -93,13 +103,15 @@ export default function Paiements() {
       </header>
 
       {error && <div className="alert-error" style={{ marginBottom: 16 }}>{error}</div>}
-      {success && <div className="alert-success" style={{ marginBottom: 16 }}>{success}</div>}
 
-      {!showForm && (
-        <button className="btn-primary" onClick={() => setShowForm(true)} style={{ marginBottom: 16 }}>
-          + Nouveau paiement
+      <div style={{ marginBottom: 16, display: 'flex', gap: 10 }}>
+        <button className="btn-primary" onClick={() => setShowForm(!showForm)}>
+          {showForm ? 'Fermer le formulaire' : '+ Nouveau paiement'}
         </button>
-      )}
+        <button className="btn-secondary" onClick={() => exportService.exportPaiements()}>
+          Exporter Excel
+        </button>
+      </div>
 
       {showForm && (
         <form className="form-panel" onSubmit={handleSubmit} style={{ marginBottom: 16 }}>
@@ -191,7 +203,7 @@ export default function Paiements() {
               liste.map((p) => (
                 <tr key={p.idPaiement}>
                   <td>{p.referenceQuittance}</td>
-                  <td>{p.contribuable?.raisonSociale || '-'}</td>
+                  <td>{p.contribuable ? p.contribuable.raisonSociale : '-'}</td>
                   <td>{p.typePaiement}</td>
                   <td>{fmt(p.montantAr)} Ar</td>
                   <td>{p.datePaiement}</td>
@@ -202,8 +214,12 @@ export default function Paiements() {
                     </span>
                   </td>
                   <td>
+                    <button className="btn-link" onClick={() => exportService.exportQuittancePdf(p.idPaiement)}>
+                      Quittance
+                    </button>
                     {!p.annule && (
-                      <button className="btn-link danger" onClick={() => handleAnnuler(p.idPaiement)}>
+                      <button className="btn-link danger" style={{ marginLeft: 10 }}
+                              onClick={() => handleAnnuler(p.idPaiement)}>
                         Annuler
                       </button>
                     )}
@@ -215,6 +231,19 @@ export default function Paiements() {
         </table>
       </div>
       <p className="table-footer">{liste.length} resultat(s)</p>
+
+      <ConfirmDialog
+        ouvert={!!confirm}
+        titre={confirm ? confirm.titre : 'Confirmation'}
+        message={confirm ? confirm.message : ''}
+        texteConfirmer={confirm ? confirm.texteConfirmer : 'Confirmer'}
+        danger={confirm ? !!confirm.danger : false}
+        onConfirmer={() => {
+          if (confirm && confirm.onConfirmer) confirm.onConfirmer();
+          setConfirm(null);
+        }}
+        onAnnuler={() => setConfirm(null)}
+      />
     </div>
   );
 }
