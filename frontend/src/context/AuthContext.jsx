@@ -5,19 +5,23 @@ const AuthContext = createContext(null);
 
 export function AuthProvider({ children }) {
   const [agent, setAgent] = useState(() => {
-    const saved = localStorage.getItem('agent');
+    // sessionStorage : la session expire a la fermeture du navigateur
+    const saved = sessionStorage.getItem('agent');
     return saved ? JSON.parse(saved) : null;
   });
 
   const login = async (email, motDePasse) => {
     const data = await loginApi(email, motDePasse);
-    localStorage.setItem('token', data.token);
-    localStorage.setItem('agent', JSON.stringify(data));
+    sessionStorage.setItem('token', data.token);
+    sessionStorage.setItem('agent', JSON.stringify(data));
     setAgent(data);
     return data;
   };
 
   const logout = () => {
+    sessionStorage.removeItem('token');
+    sessionStorage.removeItem('agent');
+    // Nettoyage de l'ancien localStorage (migration)
     localStorage.removeItem('token');
     localStorage.removeItem('agent');
     setAgent(null);
