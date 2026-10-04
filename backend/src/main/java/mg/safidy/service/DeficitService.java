@@ -39,6 +39,10 @@ public class DeficitService {
         this.parametreRepository = parametreRepository;
     }
 
+    public List<Deficit> listerTout() {
+        return deficitRepository.findAll();
+    }
+
     public List<Deficit> listerParContribuable(Long idContribuable) {
         return deficitRepository.findByContribuableIdContribuableOrderByAnneeOrigineAsc(idContribuable);
     }

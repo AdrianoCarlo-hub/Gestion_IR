@@ -14,4 +14,6 @@ public interface AcompteRepository extends JpaRepository<Acompte, Long> {
         Long idContribuable, Integer annee, Integer numero);
 
     List<Acompte> findByStatutOrderByDateEcheanceAsc(String statut);
+
+    List<Acompte> findByContribuableIdContribuableOrderByAnneeAsc(Long idContribuable);
 }
