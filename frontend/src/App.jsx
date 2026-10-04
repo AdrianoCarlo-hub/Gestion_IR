@@ -6,17 +6,11 @@ import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
 import Contribuables from './pages/Contribuables';
 import Declarations from './pages/Declarations';
-
-function Placeholder({ title }) {
-  return (
-    <div className="page">
-      <header className="page-header">
-        <h1>{title}</h1>
-        <p className="page-sub">Module en cours de developpement</p>
-      </header>
-    </div>
-  );
-}
+import Deficits from './pages/Deficits';
+import Acomptes from './pages/Acomptes';
+import Paiements from './pages/Paiements';
+import Suspensions from './pages/Suspensions';
+import Statistiques from './pages/Statistiques';
 
 export default function App() {
   return (
@@ -34,11 +28,11 @@ export default function App() {
             <Route path="/dashboard" element={<Dashboard />} />
             <Route path="/contribuables" element={<Contribuables />} />
             <Route path="/declarations" element={<Declarations />} />
-            <Route path="/deficits" element={<Placeholder title="Deficits" />} />
-            <Route path="/acomptes" element={<Placeholder title="Acomptes" />} />
-            <Route path="/paiements" element={<Placeholder title="Paiements" />} />
-            <Route path="/suspensions" element={<Placeholder title="Arret / reprise" />} />
-            <Route path="/statistiques" element={<Placeholder title="Statistiques" />} />
+            <Route path="/deficits" element={<Deficits />} />
+            <Route path="/acomptes" element={<Acomptes />} />
+            <Route path="/paiements" element={<Paiements />} />
+            <Route path="/suspensions" element={<Suspensions />} />
+            <Route path="/statistiques" element={<Statistiques />} />
           </Route>
           <Route path="/" element={<Navigate to="/dashboard" replace />} />
           <Route path="*" element={<Navigate to="/dashboard" replace />} />
