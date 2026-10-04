@@ -8,8 +8,10 @@ const items = [
   { to: '/deficits', label: 'Deficits' },
   { to: '/acomptes', label: 'Acomptes' },
   { to: '/paiements', label: 'Paiements' },
+  { to: '/penalites', label: 'Penalites' },
   { to: '/suspensions', label: 'Arret / reprise' },
   { to: '/statistiques', label: 'Statistiques' },
+  { to: '/audit', label: 'Journal d audit' },
 ];
 
 export default function Sidebar() {

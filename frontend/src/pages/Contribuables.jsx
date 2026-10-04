@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import ContribuableForm from '../components/ContribuableForm';
 import * as service from '../services/contribuableService';
+import * as exportService from '../services/exportService';
 
 export default function Contribuables() {
   const { agent } = useAuth();
@@ -109,6 +110,9 @@ export default function Contribuables() {
               <option value="RADIE">Radie</option>
             </select>
             <button type="submit" className="btn-primary">Rechercher</button>
+            <button type="button" className="btn-secondary" onClick={() => exportService.exportContribuables()}>
+              Exporter Excel
+            </button>
             <button type="button" className="btn-secondary" onClick={handleNouveau}>
               + Nouveau contribuable
             </button>

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { lister as listerContribuables } from '../services/contribuableService';
 import * as service from '../services/declarationService';
+import * as exportService from '../services/exportService';
 import DeclarationForm from './DeclarationForm';
 
 const anneeCourante = new Date().getFullYear();
@@ -111,6 +112,9 @@ export default function Declarations() {
               onChange={(e) => setAnnee(e.target.value)}
             />
             <button type="submit" className="btn-primary">Rechercher</button>
+            <button type="button" className="btn-secondary" onClick={() => exportService.exportDeclarations()}>
+              Exporter Excel
+            </button>
             <button type="button" className="btn-secondary" onClick={handleNouvelle}>
               + Nouvelle declaration
             </button>

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import * as service from '../services/statistiqueService';
+import * as exportService from '../services/exportService';
 
 const fmt = (n) => (n == null ? '0' : Number(n).toLocaleString('fr-FR').replace(/\u202f|\u00a0/g, ' '));
 
@@ -17,9 +18,14 @@ export default function Statistiques() {
 
   return (
     <div className="page">
-      <header className="page-header">
-        <h1>Statistiques</h1>
-        <p className="page-sub">Chiffres cles de l application</p>
+      <header className="page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div>
+          <h1>Statistiques</h1>
+          <p className="page-sub">Chiffres cles de l application</p>
+        </div>
+        <button className="btn-primary" onClick={() => exportService.exportStatistiquesPdf()}>
+          Exporter PDF
+        </button>
       </header>
 
       {error && <div className="alert-error" style={{ marginBottom: 16 }}>{error}</div>}
