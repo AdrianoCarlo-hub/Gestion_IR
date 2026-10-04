@@ -5,6 +5,7 @@ import Layout from './components/Layout';
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
 import Contribuables from './pages/Contribuables';
+import Declarations from './pages/Declarations';
 
 function Placeholder({ title }) {
   return (
@@ -32,7 +33,7 @@ export default function App() {
           >
             <Route path="/dashboard" element={<Dashboard />} />
             <Route path="/contribuables" element={<Contribuables />} />
-            <Route path="/declarations" element={<Placeholder title="Declarations IR" />} />
+            <Route path="/declarations" element={<Declarations />} />
             <Route path="/deficits" element={<Placeholder title="Deficits" />} />
             <Route path="/acomptes" element={<Placeholder title="Acomptes" />} />
             <Route path="/paiements" element={<Placeholder title="Paiements" />} />
