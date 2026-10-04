@@ -1,0 +1,25 @@
+# =====================================================
+# Safidy - Configuration Spring Boot (MODELE)
+# =====================================================
+# Copiez ce fichier en "application.properties" et
+# remplacez le mot de passe par le votre.
+
+spring.application.name=safidy
+
+server.port=8080
+
+spring.datasource.url=jdbc:postgresql://localhost:5432/safidy
+spring.datasource.username=postgres
+spring.datasource.password=VOTRE_MOT_DE_PASSE_ICI
+spring.datasource.driver-class-name=org.postgresql.Driver
+
+spring.jpa.hibernate.ddl-auto=none
+spring.jpa.show-sql=true
+spring.jpa.properties.hibernate.format_sql=true
+spring.jpa.open-in-view=false
+
+spring.jackson.date-format=dd/MM/yyyy
+spring.jackson.time-zone=Indian/Antananarivo
+
+logging.level.mg.safidy=DEBUG
+logging.level.org.springframework.security=INFO
