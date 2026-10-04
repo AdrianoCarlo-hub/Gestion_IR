@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useCallback } from 'react';
+import { createContext, useContext, useState, useCallback, useMemo } from 'react';
 
 const ToastContext = createContext(null);
 
@@ -25,8 +25,15 @@ export function ToastProvider({ children }) {
   const info    = useCallback((msg, d = 4000) => push('info', msg, d), [push]);
   const warning = useCallback((msg, d = 5000) => push('warning', msg, d), [push]);
 
+  // ✅ useMemo : la valeur ne change QUE quand les fonctions changent
+  // (elles sont stables grâce à useCallback)
+  const value = useMemo(
+    () => ({ toasts, push, success, error, info, warning, remove }),
+    [toasts, push, success, error, info, warning, remove]
+  );
+
   return (
-    <ToastContext.Provider value={{ toasts, push, success, error, info, warning, remove }}>
+    <ToastContext.Provider value={value}>
       {children}
       <div className="toast-container">
         {toasts.map((t) => (

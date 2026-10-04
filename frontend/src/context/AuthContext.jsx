@@ -1,38 +1,35 @@
-import { createContext, useContext, useState } from 'react';
+import { createContext, useContext, useState, useCallback, useMemo } from 'react';
 import { login as loginApi } from '../services/authService';
 
 const AuthContext = createContext(null);
 
 export function AuthProvider({ children }) {
   const [agent, setAgent] = useState(() => {
-    // sessionStorage : la session expire a la fermeture du navigateur
     const saved = sessionStorage.getItem('agent');
     return saved ? JSON.parse(saved) : null;
   });
 
-  const login = async (email, motDePasse) => {
+  const login = useCallback(async (email, motDePasse) => {
     const data = await loginApi(email, motDePasse);
     sessionStorage.setItem('token', data.token);
     sessionStorage.setItem('agent', JSON.stringify(data));
     setAgent(data);
     return data;
-  };
+  }, []);
 
-  const logout = () => {
+  const logout = useCallback(() => {
     sessionStorage.removeItem('token');
     sessionStorage.removeItem('agent');
-    // Nettoyage de l'ancien localStorage (migration)
     localStorage.removeItem('token');
     localStorage.removeItem('agent');
     setAgent(null);
-  };
+  }, []);
 
-  const value = {
-    agent,
-    isAuth: !!agent,
-    login,
-    logout,
-  };
+  // ✅ useMemo : la valeur change uniquement quand agent/login/logout changent
+  const value = useMemo(
+    () => ({ agent, isAuth: !!agent, login, logout }),
+    [agent, login, logout]
+  );
 
   return (
     <AuthContext.Provider value={value}>

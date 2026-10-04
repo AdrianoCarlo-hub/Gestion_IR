@@ -10,24 +10,44 @@ export default function useInactivityLogout() {
   const { isAuth, logout } = useAuth();
   const navigate = useNavigate();
   const toast = useToast();
-  const timerRef = useRef(null);
-  const avertissementRef = useRef(false);
+
+  // Refs pour éviter que le useEffect se relance à chaque render
+  const toastRef = useRef(toast);
+  const logoutRef = useRef(logout);
+  const navigateRef = useRef(navigate);
+
+  // Mise à jour des refs sans relancer le useEffect
+  useEffect(() => {
+    toastRef.current = toast;
+    logoutRef.current = logout;
+    navigateRef.current = navigate;
+  });
 
   useEffect(() => {
     if (!isAuth) return;
 
+    let timerAvertissement = null;
+    let timerDeconnexion = null;
+
     const reset = () => {
-      if (timerRef.current) clearTimeout(timerRef.current);
-      avertissementRef.current = false;
+      if (timerAvertissement) clearTimeout(timerAvertissement);
+      if (timerDeconnexion) clearTimeout(timerDeconnexion);
 
-      timerRef.current = setTimeout(() => {
-        toast.warning('Vous allez etre deconnecte dans 1 minute pour inactivite...', 60000);
-        avertissementRef.current = true;
+      // Phase 1 : attendre (15 min - 1 min) puis afficher le toast
+      timerAvertissement = setTimeout(() => {
+        toastRef.current.warning(
+          'Vous allez etre deconnecte dans 1 minute pour inactivite...',
+          60000
+        );
 
-        timerRef.current = setTimeout(() => {
-          logout();
-          toast.info('Session expiree pour inactivite. Veuillez vous reconnecter.');
-          navigate('/login', { replace: true });
+        // Phase 2 : après 1 minute, déconnecter
+        timerDeconnexion = setTimeout(() => {
+          logoutRef.current();
+          toastRef.current.info(
+            'Session expiree pour inactivite. Veuillez vous reconnecter.',
+            5000
+          );
+          navigateRef.current('/login', { replace: true });
         }, AVERTISSEMENT_AVANT_MS);
       }, DUREE_INACTIVITE_MS - AVERTISSEMENT_AVANT_MS);
     };
@@ -35,11 +55,12 @@ export default function useInactivityLogout() {
     const events = ['mousemove', 'mousedown', 'keydown', 'scroll', 'touchstart', 'click'];
     events.forEach((e) => window.addEventListener(e, reset, { passive: true }));
 
-    reset();
+    reset(); // Démarre le premier cycle
 
     return () => {
       events.forEach((e) => window.removeEventListener(e, reset));
-      if (timerRef.current) clearTimeout(timerRef.current);
+      if (timerAvertissement) clearTimeout(timerAvertissement);
+      if (timerDeconnexion) clearTimeout(timerDeconnexion);
     };
-  }, [isAuth, logout, navigate, toast]);
+  }, [isAuth]); // ✅ Une seule dépendance : isAuth
 }
