@@ -49,9 +49,10 @@ public class ContribuableService {
     }
 
     public List<Contribuable> rechercher(String motCle, String statut, Long idSecteur) {
-        String mc = (motCle == null || motCle.isBlank()) ? null : motCle.trim();
-        String st = (statut == null || statut.isBlank()) ? null : statut.trim();
-        return contribuableRepository.rechercher(mc, st, idSecteur);
+        String mc = (motCle == null || motCle.isBlank()) ? "" : motCle.trim();
+        String st = (statut == null || statut.isBlank()) ? "" : statut.trim();
+        Long sec = (idSecteur == null) ? 0L : idSecteur;
+        return contribuableRepository.rechercher(mc, st, sec);
     }
 
     @Transactional

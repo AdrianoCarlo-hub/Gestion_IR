@@ -16,13 +16,13 @@ public interface ContribuableRepository extends JpaRepository<Contribuable, Long
     List<Contribuable> findByStatutOrderByRaisonSocialeAsc(String statut);
 
     @Query("SELECT c FROM Contribuable c " +
-           "WHERE (:motCle IS NULL OR " +
+           "WHERE (:motCle = '' OR " +
            "  LOWER(c.nif) LIKE LOWER(CONCAT('%', :motCle, '%')) OR " +
            "  LOWER(c.raisonSociale) LIKE LOWER(CONCAT('%', :motCle, '%')) OR " +
            "  LOWER(c.telephone) LIKE LOWER(CONCAT('%', :motCle, '%')) OR " +
            "  LOWER(c.stat) LIKE LOWER(CONCAT('%', :motCle, '%'))) " +
-           "AND (:statut IS NULL OR c.statut = :statut) " +
-           "AND (:idSecteur IS NULL OR c.secteur.idSecteur = :idSecteur) " +
+           "AND (:statut = '' OR c.statut = :statut) " +
+           "AND (:idSecteur = 0 OR c.secteur.idSecteur = :idSecteur) " +
            "ORDER BY c.raisonSociale ASC")
     List<Contribuable> rechercher(
         @Param("motCle") String motCle,
