@@ -17,8 +17,8 @@ public class JwtService {
     private final SecretKey secretKey;
     private final long expirationMs;
 
-    public JwtService(@Value("${safidy.jwt.secret:SafidySuperSecretKeyForJwtToken1234567890!}") String secret,
-                       @Value("${safidy.jwt.expiration-ms:28800000}") long expirationMs) {
+    public JwtService(@Value("${jwt.secret}") String secret,
+                       @Value("${jwt.expiration:86400000}") long expirationMs) {
         this.secretKey = Keys.hmacShaKeyFor(secret.getBytes(StandardCharsets.UTF_8));
         this.expirationMs = expirationMs;
     }

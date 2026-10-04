@@ -36,3 +36,6 @@ database/backup_*.sql
 
 # Fichier de configuration local (contient le mot de passe)
 backend/src/main/resources/application.properties
+
+# Fichier env local (contient le mot de passe)
+backend/.env
