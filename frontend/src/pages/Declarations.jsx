@@ -1,0 +1,212 @@
+import { useEffect, useState } from 'react';
+import { useAuth } from '../context/AuthContext';
+import { lister as listerContribuables } from '../services/contribuableService';
+import * as service from '../services/declarationService';
+import DeclarationForm from './DeclarationForm';
+
+const anneeCourante = new Date().getFullYear();
+
+const fmt = (n) => (n == null ? '0' : Number(n).toLocaleString('fr-FR').replace(/\u202f|\u00a0/g, ' '));
+
+export default function Declarations() {
+  const { agent } = useAuth();
+  const [liste, setListe] = useState([]);
+  const [contribuables, setContribuables] = useState([]);
+  const [annee, setAnnee] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
+  const [mode, setMode] = useState('liste');
+  const [idEnEdition, setIdEnEdition] = useState(null);
+  const [nouveauContribuable, setNouveauContribuable] = useState('');
+  const [nouvelleAnnee, setNouvelleAnnee] = useState(anneeCourante);
+
+  const charger = async () => {
+    setLoading(true);
+    setError('');
+    try {
+      const data = await service.lister(annee || undefined);
+      setListe(data);
+    } catch (e) {
+      setError(e.response?.data?.message || 'Erreur de chargement');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    charger();
+    listerContribuables().then(setContribuables).catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const handleRecherche = (e) => {
+    e.preventDefault();
+    charger();
+  };
+
+  const handleNouvelle = () => {
+    if (contribuables.length === 0) {
+      setError('Aucun contribuable disponible. Creez-en un d abord.');
+      return;
+    }
+    setNouveauContribuable(String(contribuables[0].idContribuable));
+    setNouvelleAnnee(anneeCourante);
+    setMode('nouveau');
+    setError('');
+    setSuccess('');
+  };
+
+  const handleCreerDeclaration = async (e) => {
+    e.preventDefault();
+    setError('');
+    try {
+      const payload = {
+        idContribuable: Number(nouveauContribuable),
+        annee: Number(nouvelleAnnee),
+        dateDebut: nouvelleAnnee + '-01-01',
+        dateFin: nouvelleAnnee + '-12-31',
+        idAgent: agent?.idAgent || 3,
+      };
+      const d = await service.creer(payload);
+      setIdEnEdition(d.idDeclaration);
+      setMode('editer');
+      setSuccess('Declaration creee (brouillon)');
+    } catch (err) {
+      setError(err.response?.data?.message || err.message || 'Erreur');
+    }
+  };
+
+  const handleOuvrir = (id) => {
+    setIdEnEdition(id);
+    setMode('editer');
+    setError('');
+    setSuccess('');
+  };
+
+  const handleRetour = () => {
+    setMode('liste');
+    setIdEnEdition(null);
+    charger();
+  };
+
+  return (
+    <div className="page">
+      <header className="page-header">
+        <h1>Declarations IR</h1>
+        <p className="page-sub">Declaration annuelle avec calcul automatique de l impot</p>
+      </header>
+
+      {error && <div className="alert-error" style={{ marginBottom: 16 }}>{error}</div>}
+      {success && <div className="alert-success" style={{ marginBottom: 16 }}>{success}</div>}
+
+      {mode === 'liste' && (
+        <>
+          <form className="search-bar" onSubmit={handleRecherche}>
+            <input
+              type="number"
+              className="form-input"
+              placeholder="Annee (ex: 2026)"
+              value={annee}
+              onChange={(e) => setAnnee(e.target.value)}
+            />
+            <button type="submit" className="btn-primary">Rechercher</button>
+            <button type="button" className="btn-secondary" onClick={handleNouvelle}>
+              + Nouvelle declaration
+            </button>
+          </form>
+
+          <div className="table-container">
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>NIF</th>
+                  <th>Contribuable</th>
+                  <th>Annee</th>
+                  <th>IR du</th>
+                  <th>Solde a payer</th>
+                  <th>Statut</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {loading ? (
+                  <tr><td colSpan={7} style={{ textAlign: 'center' }}>Chargement...</td></tr>
+                ) : liste.length === 0 ? (
+                  <tr><td colSpan={7} style={{ textAlign: 'center' }}>Aucune declaration</td></tr>
+                ) : (
+                  liste.map((d) => (
+                    <tr key={d.idDeclaration}>
+                      <td>{d.contribuable?.nif || '-'}</td>
+                      <td>{d.contribuable?.raisonSociale || '-'}</td>
+                      <td>{d.annee}</td>
+                      <td>{fmt(d.irDu)} Ar</td>
+                      <td>{fmt(d.soldeAPayer)} Ar</td>
+                      <td>
+                        <span className={'badge badge-' + (d.statut || '').toLowerCase()}>
+                          {d.statut}
+                        </span>
+                      </td>
+                      <td>
+                        <button className="btn-link" onClick={() => handleOuvrir(d.idDeclaration)}>
+                          Ouvrir
+                        </button>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+          <p className="table-footer">{liste.length} resultat(s)</p>
+        </>
+      )}
+
+      {mode === 'nouveau' && (
+        <>
+          <h2 className="form-title">Nouvelle declaration IR</h2>
+          <form className="form-panel" onSubmit={handleCreerDeclaration}>
+            <div className="form-row">
+              <div className="form-group" style={{ flex: 2 }}>
+                <label className="form-label">Contribuable *</label>
+                <select
+                  className="form-input"
+                  value={nouveauContribuable}
+                  onChange={(e) => setNouveauContribuable(e.target.value)}
+                >
+                  {contribuables.map((c) => (
+                    <option key={c.idContribuable} value={c.idContribuable}>
+                      {c.nif} - {c.raisonSociale}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="form-group">
+                <label className="form-label">Annee *</label>
+                <input
+                  type="number"
+                  className="form-input"
+                  value={nouvelleAnnee}
+                  onChange={(e) => setNouvelleAnnee(e.target.value)}
+                  min={2000}
+                  max={2100}
+                />
+              </div>
+            </div>
+            <div className="form-actions">
+              <button type="submit" className="btn-primary">Creer la declaration</button>
+              <button type="button" className="btn-secondary" onClick={handleRetour}>Annuler</button>
+            </div>
+          </form>
+        </>
+      )}
+
+      {mode === 'editer' && idEnEdition && (
+        <DeclarationForm
+          idDeclaration={idEnEdition}
+          onRetour={handleRetour}
+        />
+      )}
+    </div>
+  );
+}

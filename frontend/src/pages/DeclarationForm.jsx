@@ -1,0 +1,375 @@
+import { useEffect, useState } from 'react';
+import * as service from '../services/declarationService';
+
+const fmt = (n) =>
+  n == null ? '0' : Number(n).toLocaleString('fr-FR').replace(/\u202f|\u00a0/g, ' ');
+
+const CATEGORIES = [
+  { value: 'SALAIRE', label: 'Salaire' },
+  { value: 'LOYER', label: 'Loyer' },
+  { value: 'ELECTRICITE', label: 'Electricite' },
+  { value: 'TRANSPORT', label: 'Transport' },
+  { value: 'AUTRE', label: 'Autre' },
+];
+
+export default function DeclarationForm({ idDeclaration, onRetour }) {
+  const [declaration, setDeclaration] = useState(null);
+  const [charges, setCharges] = useState([]);
+  const [caHt, setCaHt] = useState(0);
+  const [reintegrations, setReintegrations] = useState(0);
+  const [deductions, setDeductions] = useState(0);
+  const [acomptes, setAcomptes] = useState(0);
+  const [newCat, setNewCat] = useState('SALAIRE');
+  const [newLib, setNewLib] = useState('');
+  const [newMontant, setNewMontant] = useState('');
+  const [newJustif, setNewJustif] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
+
+  const charger = async () => {
+    try {
+      const d = await service.trouver(idDeclaration);
+      setDeclaration(d);
+      setCaHt(d.caHt || 0);
+      setReintegrations(d.totalReintegrations || 0);
+      setDeductions(d.totalDeductions || 0);
+      setAcomptes(d.acomptesVerses || 0);
+      const c = await service.listerCharges(idDeclaration);
+      setCharges(c);
+    } catch (e) {
+      setError(e.response?.data?.message || 'Erreur de chargement');
+    }
+  };
+
+  useEffect(() => {
+    charger();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [idDeclaration]);
+
+  const verrouille = declaration && declaration.statut !== 'BROUILLON';
+
+  const handleSauverCa = async () => {
+    setError('');
+    try {
+      await service.modifierCaHt(idDeclaration, Number(caHt));
+      setSuccess('Chiffre d affaires enregistre');
+      charger();
+    } catch (e) {
+      setError(e.response?.data?.message || 'Erreur');
+    }
+  };
+
+  const handleAjouterCharge = async (e) => {
+    e.preventDefault();
+    setError('');
+    if (!newLib.trim() || !newMontant || Number(newMontant) <= 0) {
+      setError('Libelle et montant > 0 obligatoires');
+      return;
+    }
+    try {
+      await service.ajouterCharge(idDeclaration, {
+        categorie: newCat,
+        libelle: newLib,
+        montantAr: Number(newMontant),
+        justificatifRef: newJustif || null,
+      });
+      setNewLib('');
+      setNewMontant('');
+      setNewJustif('');
+      setSuccess('Charge ajoutee');
+      charger();
+    } catch (e) {
+      setError(e.response?.data?.message || 'Erreur');
+    }
+  };
+
+  const handleSupprimerCharge = async (idLigne) => {
+    if (!confirm('Supprimer cette charge ?')) return;
+    try {
+      await service.supprimerCharge(idLigne);
+      charger();
+    } catch (e) {
+      setError(e.response?.data?.message || 'Erreur');
+    }
+  };
+
+  const handleCalculer = async () => {
+    setError('');
+    setSuccess('');
+    setLoading(true);
+    try {
+      await service.modifierCaHt(idDeclaration, Number(caHt));
+      const d = await service.calculer(idDeclaration, {
+        totalReintegrations: Number(reintegrations),
+        totalDeductions: Number(deductions),
+        acomptesVerses: Number(acomptes),
+      });
+      setDeclaration(d);
+      setSuccess('Calcul effectue avec succes');
+    } catch (e) {
+      setError(e.response?.data?.message || 'Erreur de calcul');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleValider = async () => {
+    if (!confirm('Valider cette declaration ? Les acomptes de l annee suivante seront generes.')) return;
+    setError('');
+    try {
+      const d = await service.valider(idDeclaration);
+      setDeclaration(d);
+      setSuccess('Declaration validee. Acomptes generes pour l annee suivante.');
+    } catch (e) {
+      setError(e.response?.data?.message || 'Erreur');
+    }
+  };
+
+  if (!declaration) {
+    return <p>Chargement...</p>;
+  }
+
+  const totalChargesAffiche = charges.reduce((s, c) => s + (c.montantAr || 0), 0);
+
+  return (
+    <>
+      <div className="decl-header">
+        <div>
+          <h2 className="form-title">
+            {declaration.contribuable?.raisonSociale} — Exercice {declaration.annee}
+          </h2>
+          <p className="page-sub">
+            NIF : {declaration.contribuable?.nif} — Statut :{' '}
+            <span className={'badge badge-' + (declaration.statut || '').toLowerCase()}>
+              {declaration.statut}
+            </span>
+          </p>
+        </div>
+        <button className="btn-secondary" onClick={onRetour}>Retour a la liste</button>
+      </div>
+
+      {error && <div className="alert-error" style={{ marginBottom: 16 }}>{error}</div>}
+      {success && <div className="alert-success" style={{ marginBottom: 16 }}>{success}</div>}
+
+      {verrouille && (
+        <div className="alert-warning" style={{ marginBottom: 16 }}>
+          Cette declaration est {declaration.statut} — elle n est plus modifiable.
+        </div>
+      )}
+
+      <div className="decl-grid">
+        <div>
+          <div className="form-panel" style={{ marginBottom: 16 }}>
+            <h3 className="section-title">Chiffre d affaires</h3>
+            <div className="form-row">
+              <div className="form-group" style={{ flex: 2 }}>
+                <label className="form-label">CA HT (Ar) *</label>
+                <input
+                  type="number"
+                  className="form-input"
+                  value={caHt}
+                  onChange={(e) => setCaHt(e.target.value)}
+                  disabled={verrouille}
+                  min={0}
+                />
+              </div>
+              {!verrouille && (
+                <div className="form-group" style={{ flex: 0, justifyContent: 'flex-end' }}>
+                  <button className="btn-primary" onClick={handleSauverCa}>Enregistrer CA</button>
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div className="form-panel" style={{ marginBottom: 16 }}>
+            <h3 className="section-title">Charges ({charges.length})</h3>
+            <table className="data-table" style={{ marginBottom: 12 }}>
+              <thead>
+                <tr>
+                  <th>Categorie</th>
+                  <th>Libelle</th>
+                  <th>Montant</th>
+                  {!verrouille && <th></th>}
+                </tr>
+              </thead>
+              <tbody>
+                {charges.length === 0 ? (
+                  <tr><td colSpan={verrouille ? 3 : 4} style={{ textAlign: 'center' }}>
+                    Aucune charge
+                  </td></tr>
+                ) : (
+                  charges.map((c) => (
+                    <tr key={c.idLigne}>
+                      <td>{c.categorie}</td>
+                      <td>{c.libelle}</td>
+                      <td>{fmt(c.montantAr)} Ar</td>
+                      {!verrouille && (
+                        <td>
+                          <button className="btn-link danger" onClick={() => handleSupprimerCharge(c.idLigne)}>
+                            Supprimer
+                          </button>
+                        </td>
+                      )}
+                    </tr>
+                  ))
+                )}
+              </tbody>
+              <tfoot>
+                <tr>
+                  <td colSpan={2} style={{ textAlign: 'right', fontWeight: 600 }}>Total charges</td>
+                  <td colSpan={verrouille ? 1 : 2} style={{ fontWeight: 700 }}>
+                    {fmt(totalChargesAffiche)} Ar
+                  </td>
+                </tr>
+              </tfoot>
+            </table>
+
+            {!verrouille && (
+              <form onSubmit={handleAjouterCharge} className="inline-form">
+                <select className="form-input" value={newCat} onChange={(e) => setNewCat(e.target.value)}>
+                  {CATEGORIES.map((c) => (
+                    <option key={c.value} value={c.value}>{c.label}</option>
+                  ))}
+                </select>
+                <input
+                  className="form-input"
+                  placeholder="Libelle"
+                  value={newLib}
+                  onChange={(e) => setNewLib(e.target.value)}
+                />
+                <input
+                  type="number"
+                  className="form-input"
+                  placeholder="Montant (Ar)"
+                  value={newMontant}
+                  onChange={(e) => setNewMontant(e.target.value)}
+                  min={0}
+                />
+                <input
+                  className="form-input"
+                  placeholder="N facture"
+                  value={newJustif}
+                  onChange={(e) => setNewJustif(e.target.value)}
+                />
+                <button type="submit" className="btn-primary">+ Ajouter</button>
+              </form>
+            )}
+          </div>
+
+          <div className="form-panel">
+            <h3 className="section-title">Ajustements et acomptes</h3>
+            <div className="form-row">
+              <div className="form-group">
+                <label className="form-label">Reintegrations (Ar)</label>
+                <input
+                  type="number"
+                  className="form-input"
+                  value={reintegrations}
+                  onChange={(e) => setReintegrations(e.target.value)}
+                  disabled={verrouille}
+                  min={0}
+                />
+              </div>
+              <div className="form-group">
+                <label className="form-label">Deductions (Ar)</label>
+                <input
+                  type="number"
+                  className="form-input"
+                  value={deductions}
+                  onChange={(e) => setDeductions(e.target.value)}
+                  disabled={verrouille}
+                  min={0}
+                />
+              </div>
+              <div className="form-group">
+                <label className="form-label">Acomptes verses (Ar)</label>
+                <input
+                  type="number"
+                  className="form-input"
+                  value={acomptes}
+                  onChange={(e) => setAcomptes(e.target.value)}
+                  disabled={verrouille}
+                  min={0}
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div>
+          <div className="result-panel">
+            <h3 className="result-title">Resultat du calcul</h3>
+
+            <div className="result-line">
+              <span>Resultat comptable</span>
+              <strong>{fmt(declaration.resultatComptable)} Ar</strong>
+            </div>
+            <div className="result-line">
+              <span>Total reintegrations</span>
+              <strong>{fmt(declaration.totalReintegrations)} Ar</strong>
+            </div>
+            <div className="result-line">
+              <span>Total deductions</span>
+              <strong>{fmt(declaration.totalDeductions)} Ar</strong>
+            </div>
+            <div className="result-line">
+              <span>Deficit impute</span>
+              <strong>{fmt(declaration.deficitImpute)} Ar</strong>
+            </div>
+            <div className="result-line">
+              <span>Base imposable</span>
+              <strong>{fmt(declaration.baseImposable)} Ar</strong>
+            </div>
+            <div className="result-line">
+              <span>IR brut (20 %)</span>
+              <strong>{fmt(declaration.irBrut)} Ar</strong>
+            </div>
+            <div className="result-line">
+              <span>Minimum de perception</span>
+              <strong>{fmt(declaration.minimumPerception)} Ar</strong>
+            </div>
+            <div className="result-line highlight">
+              <span>IR du</span>
+              <strong>{fmt(declaration.irDu)} Ar</strong>
+            </div>
+            <div className="result-line">
+              <span>Acomptes verses</span>
+              <strong>{fmt(declaration.acomptesVerses)} Ar</strong>
+            </div>
+            {declaration.soldeAPayer > 0 ? (
+              <div className="result-line big">
+                <span>Solde a payer</span>
+                <strong>{fmt(declaration.soldeAPayer)} Ar</strong>
+              </div>
+            ) : declaration.creditImpot > 0 ? (
+              <div className="result-line big credit">
+                <span>Credit d impot</span>
+                <strong>{fmt(declaration.creditImpot)} Ar</strong>
+              </div>
+            ) : null}
+          </div>
+
+          {!verrouille && (
+            <div className="form-panel" style={{ marginTop: 16 }}>
+              <button
+                className="btn-primary full-width"
+                onClick={handleCalculer}
+                disabled={loading}
+              >
+                {loading ? 'Calcul en cours...' : 'Calculer l impot'}
+              </button>
+              <button
+                className="btn-validate full-width"
+                onClick={handleValider}
+                style={{ marginTop: 10 }}
+              >
+                Valider la declaration
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+    </>
+  );
+}
