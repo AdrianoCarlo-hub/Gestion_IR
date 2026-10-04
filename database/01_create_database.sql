@@ -1,0 +1,10 @@
+-- =====================================================
+-- Safidy - 01_create_database.sql
+-- =====================================================
+-- La base "safidy" a deja ete creee manuellement.
+-- Ce fichier sert de documentation.
+--
+-- Pour recreer la base, executer dans psql :
+--   DROP DATABASE IF EXISTS safidy;
+--   CREATE DATABASE safidy ENCODING 'UTF8';
+-- =====================================================
