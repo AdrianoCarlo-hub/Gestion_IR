@@ -17,11 +17,8 @@ api.interceptors.response.use(
   (error) => {
     const status = error.response?.status;
     const url = error.config?.url || '';
-
-    // Ne PAS rediriger pour la route de login elle-meme
     const isLoginRoute = url.includes('/auth/login');
 
-    // 401 = non authentifie, 403 = token invalide/expire
     if ((status === 401 || status === 403) && !isLoginRoute) {
       localStorage.removeItem('token');
       localStorage.removeItem('agent');
