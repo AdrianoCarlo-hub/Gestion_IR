@@ -15,7 +15,14 @@ api.interceptors.request.use((config) => {
 api.interceptors.response.use(
   (response) => response,
   (error) => {
-    if (error.response && error.response.status === 401) {
+    const status = error.response?.status;
+    const url = error.config?.url || '';
+
+    // Ne PAS rediriger pour la route de login elle-meme
+    const isLoginRoute = url.includes('/auth/login');
+
+    // 401 = non authentifie, 403 = token invalide/expire
+    if ((status === 401 || status === 403) && !isLoginRoute) {
       localStorage.removeItem('token');
       localStorage.removeItem('agent');
       if (window.location.pathname !== '/login') {
