@@ -3,6 +3,7 @@ import { useAuth } from '../context/AuthContext';
 import { lister as listerContribuables } from '../services/contribuableService';
 import * as service from '../services/declarationService';
 import DeclarationForm from './DeclarationForm';
+import { LuSearch, LuPlus } from 'react-icons/lu';
 
 const anneeCourante = new Date().getFullYear();
 const SEUIL_REEL_OBLIGATOIRE = 400000000;
@@ -59,12 +60,10 @@ export default function Declarations() {
     setSuccess('');
   };
 
-  // Le contribuable actuellement selectionne
   const contribuableSelectionne = contribuables.find(
     (c) => String(c.idContribuable) === String(nouveauContribuable)
   );
 
-  // Erreurs de validation temps reel
   const erreurAnnee = (() => {
     if (!contribuableSelectionne) return null;
     const anneeImm = contribuableSelectionne.dateImmatriculation
@@ -132,16 +131,21 @@ export default function Declarations() {
       {mode === 'liste' && (
         <>
           <form className="search-bar" onSubmit={handleRecherche}>
-            <input
-              type="number"
-              className="form-input"
-              placeholder="Annee (ex: 2026)"
-              value={annee}
-              onChange={(e) => setAnnee(e.target.value)}
-            />
-            <button type="submit" className="btn-primary">Rechercher</button>
+            <div className="search-input-wrapper">
+              <LuSearch className="search-icon" size={16} />
+              <input
+                type="number"
+                className="search-input form-input"
+                placeholder="Annee (ex: 2026)"
+                value={annee}
+                onChange={(e) => setAnnee(e.target.value)}
+              />
+            </div>
+            <button type="submit" className="btn-primary">
+              <LuSearch size={14} /> Rechercher
+            </button>
             <button type="button" className="btn-secondary" onClick={handleNouvelle}>
-              + Nouvelle declaration
+              <LuPlus size={14} /> Nouvelle declaration
             </button>
           </form>
 
@@ -166,8 +170,8 @@ export default function Declarations() {
                 ) : (
                   liste.map((d) => (
                     <tr key={d.idDeclaration}>
-                      <td>{d.contribuable?.nif || '-'}</td>
-                      <td>{d.contribuable?.raisonSociale || '-'}</td>
+                      <td>{d.contribuable ? d.contribuable.nif : '-'}</td>
+                      <td>{d.contribuable ? d.contribuable.raisonSociale : '-'}</td>
                       <td>{d.annee}</td>
                       <td>{fmt(d.irDu)} Ar</td>
                       <td>{fmt(d.soldeAPayer)} Ar</td>
@@ -231,12 +235,11 @@ export default function Declarations() {
               </div>
             </div>
 
-            {/* Info seuil reel obligatoire */}
             {contribuableSelectionne &&
              contribuableSelectionne.regime === 'REEL_OBLIGATOIRE' && (
               <div className="alert-warning" style={{ marginBottom: 12 }}>
                 Regime <strong>REEL OBLIGATOIRE</strong> : le CA HT devra etre
-                ≥ {fmt(SEUIL_REEL_OBLIGATOIRE)} Ar.
+                &ge; {fmt(SEUIL_REEL_OBLIGATOIRE)} Ar.
               </div>
             )}
 
