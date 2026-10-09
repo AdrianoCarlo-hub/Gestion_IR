@@ -25,16 +25,10 @@ import java.util.List;
 @Service
 public class ExcelExportService {
 
-    /**
-     * Type de colonne pour appliquer le bon format.
-     */
     public enum TypeColonne {
         TEXTE, MONTANT, DATE, ENTIER, BOOLEEN
     }
 
-    /**
-     * Definition d'une colonne d'export.
-     */
     public static class ColonneDef {
         public final String libelle;
         public final TypeColonne type;
@@ -51,9 +45,6 @@ public class ExcelExportService {
         }
     }
 
-    /**
-     * Ecrit un fichier Excel style dans la reponse HTTP.
-     */
     public void ecrire(HttpServletResponse response,
                         String nomFichier,
                         List<ColonneDef> colonnes,
@@ -62,7 +53,6 @@ public class ExcelExportService {
         try (XSSFWorkbook wb = new XSSFWorkbook()) {
             Sheet sheet = wb.createSheet("Donnees");
 
-            // ====== STYLES ======
             XSSFCellStyle headerStyle = creerStyleEntete(wb);
             XSSFCellStyle lignePaire = creerStyleLigne(wb, IndexedColors.WHITE);
             XSSFCellStyle ligneImpaire = creerStyleLigne(wb, IndexedColors.GREY_25_PERCENT);
@@ -71,7 +61,7 @@ public class ExcelExportService {
             XSSFCellStyle datePaire = creerStyleCentre(wb, lignePaire);
             XSSFCellStyle dateImpaire = creerStyleCentre(wb, ligneImpaire);
 
-            // ====== LIGNE D'ENTETE ======
+            // Ligne d'entete
             Row head = sheet.createRow(0);
             head.setHeightInPoints(28);
             for (int i = 0; i < colonnes.size(); i++) {
@@ -80,10 +70,10 @@ public class ExcelExportService {
                 c.setCellStyle(headerStyle);
             }
 
-            // ====== LIGNES DE DONNEES ======
+            // Lignes de donnees
             int r = 1;
             for (List<Object> ligne : lignes) {
-                boolean paire = (r % 2 == 1); // ligne 1 = paire (fond blanc)
+                boolean paire = (r % 2 == 1);
                 Row row = sheet.createRow(r);
                 row.setHeightInPoints(20);
 
@@ -130,7 +120,7 @@ public class ExcelExportService {
                             cell.setCellStyle(paire ? lignePaire : ligneImpaire);
                             break;
 
-                        default: // TEXTE
+                        default:
                             cell.setCellValue(v == null ? "" : v.toString());
                             cell.setCellStyle(paire ? lignePaire : ligneImpaire);
                             break;
@@ -139,28 +129,25 @@ public class ExcelExportService {
                 r++;
             }
 
-            // ====== AUTO-SIZE des colonnes ======
+            // Auto-size
             for (int i = 0; i < colonnes.size(); i++) {
                 sheet.autoSizeColumn(i);
                 int largeurMin = colonnes.get(i).largeurMin * 256;
                 if (sheet.getColumnWidth(i) < largeurMin) {
                     sheet.setColumnWidth(i, largeurMin);
                 }
-                // Limiter la largeur max a 60 caracteres
                 int largeurMax = 60 * 256;
                 if (sheet.getColumnWidth(i) > largeurMax) {
                     sheet.setColumnWidth(i, largeurMax);
                 }
             }
 
-            // ====== GEL DE L'ENTETE + FILTRE ======
+            // Freeze + filtre
             sheet.createFreezePane(0, 1);
             if (!colonnes.isEmpty()) {
-                sheet.setAutoFilter(new CellRangeAddress(
-                    0, 0, 0, colonnes.size() - 1));
+                sheet.setAutoFilter(new CellRangeAddress(0, 0, 0, colonnes.size() - 1));
             }
 
-            // ====== REPONSE HTTP ======
             response.setContentType(
                 "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
             response.setHeader("Content-Disposition",
@@ -169,21 +156,13 @@ public class ExcelExportService {
         }
     }
 
-    // ============================================================
-    // STYLES
-    // ============================================================
-
-    /** Entete vert fonce Safidy (#0d2f2a) + texte blanc gras. */
     private XSSFCellStyle creerStyleEntete(XSSFWorkbook wb) {
         XSSFCellStyle style = wb.createCellStyle();
-
         byte[] rgbVert = new byte[]{(byte) 0x0d, (byte) 0x2f, (byte) 0x2a};
         style.setFillForegroundColor(new XSSFColor(rgbVert, null));
         style.setFillPattern(FillPatternType.SOLID_FOREGROUND);
-
         style.setAlignment(HorizontalAlignment.CENTER);
         style.setVerticalAlignment(VerticalAlignment.CENTER);
-
         appliquerBordures(style, IndexedColors.GREY_50_PERCENT);
 
         XSSFFont font = wb.createFont();
@@ -191,11 +170,9 @@ public class ExcelExportService {
         font.setColor(new XSSFColor(new byte[]{(byte) 0xff, (byte) 0xff, (byte) 0xff}, null));
         font.setFontHeightInPoints((short) 11);
         style.setFont(font);
-
         return style;
     }
 
-    /** Style de ligne avec fond colore + bordures fines. */
     private XSSFCellStyle creerStyleLigne(XSSFWorkbook wb, IndexedColors fond) {
         XSSFCellStyle style = wb.createCellStyle();
         style.setFillForegroundColor(fond.getIndex());
@@ -205,7 +182,6 @@ public class ExcelExportService {
         return style;
     }
 
-    /** Style pour les montants : aligne a droite + format Ariary. */
     private XSSFCellStyle creerStyleMontant(XSSFWorkbook wb, XSSFCellStyle base) {
         XSSFCellStyle style = wb.createCellStyle();
         style.cloneStyleFrom(base);
@@ -215,7 +191,6 @@ public class ExcelExportService {
         return style;
     }
 
-    /** Style centre (pour les dates). */
     private XSSFCellStyle creerStyleCentre(XSSFWorkbook wb, XSSFCellStyle base) {
         XSSFCellStyle style = wb.createCellStyle();
         style.cloneStyleFrom(base);
@@ -223,7 +198,6 @@ public class ExcelExportService {
         return style;
     }
 
-    /** Applique des bordures fines sur les 4 cotes. */
     private void appliquerBordures(CellStyle style, IndexedColors couleur) {
         style.setBorderBottom(BorderStyle.THIN);
         style.setBorderTop(BorderStyle.THIN);
@@ -235,11 +209,9 @@ public class ExcelExportService {
         style.setRightBorderColor(couleur.getIndex());
     }
 
-    /** Formate une date en dd/MM/yyyy. */
     private String formaterDate(Object v) {
         if (v == null) return "";
         String s = v.toString();
-        // Si le format est ISO (yyyy-MM-dd...), reformater
         if (s.matches("\\d{4}-\\d{2}-\\d{2}.*")) {
             try {
                 LocalDate d = LocalDate.parse(s.substring(0, 10));

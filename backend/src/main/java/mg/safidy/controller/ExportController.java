@@ -38,9 +38,6 @@ public class ExportController {
         this.pdfService = pdfService;
     }
 
-    // ============================================================
-    // CONTRIBUABLES
-    // ============================================================
     @GetMapping("/contribuables.xlsx")
     public void exportContribuables(HttpServletResponse response) throws Exception {
         List<ColonneDef> colonnes = List.of(
@@ -76,9 +73,6 @@ public class ExportController {
         excelService.ecrire(response, "contribuables.xlsx", colonnes, lignes);
     }
 
-    // ============================================================
-    // DECLARATIONS
-    // ============================================================
     @GetMapping("/declarations.xlsx")
     public void exportDeclarations(HttpServletResponse response) throws Exception {
         List<ColonneDef> colonnes = List.of(
@@ -120,9 +114,6 @@ public class ExportController {
         excelService.ecrire(response, "declarations.xlsx", colonnes, lignes);
     }
 
-    // ============================================================
-    // PAIEMENTS
-    // ============================================================
     @GetMapping("/paiements.xlsx")
     public void exportPaiements(HttpServletResponse response) throws Exception {
         List<ColonneDef> colonnes = List.of(
@@ -152,9 +143,6 @@ public class ExportController {
         excelService.ecrire(response, "paiements.xlsx", colonnes, lignes);
     }
 
-    // ============================================================
-    // QUITTANCE PDF (inchange)
-    // ============================================================
     @GetMapping("/quittance/{idPaiement}.pdf")
     public void quittance(@PathVariable Long idPaiement, HttpServletResponse response)
             throws Exception {
@@ -162,9 +150,6 @@ public class ExportController {
         pdfService.genererQuittance(response, p);
     }
 
-    // ============================================================
-    // STATISTIQUES PDF (inchange)
-    // ============================================================
     @GetMapping("/statistiques.pdf")
     public void statistiques(HttpServletResponse response) throws Exception {
         long irTotal = declarationRepo.findAll().stream()
