@@ -29,6 +29,9 @@ public class DeclarationIRService {
     private static final List<String> CATEGORIES_VALIDES =
         Arrays.asList("SALAIRE", "LOYER", "ELECTRICITE", "TRANSPORT", "AUTRE");
 
+    // Seuil du regime reel obligatoire (Ar)
+    private static final long SEUIL_REEL_OBLIGATOIRE = 400_000_000L;
+
     private final DeclarationIRRepository declarationRepository;
     private final ContribuableRepository contribuableRepository;
     private final AgentRepository agentRepository;
@@ -74,6 +77,16 @@ public class DeclarationIRService {
         return ligneChargeRepository.findByDeclarationIdDeclaration(idDeclaration);
     }
 
+    /**
+     * Cree une declaration BROUILLON.
+     *
+     * Validations appliquees :
+     *  - Contribuable doit etre ACTIF
+     *  - Une seule declaration par contribuable et par annee
+     *  - Annee >= annee d'immatriculation
+     *  - Annee <= annee courante
+     *  - Duree de l'exercice <= 18 mois
+     */
     @Transactional
     public DeclarationIR creerBrouillon(Long idContribuable, Integer annee,
                                          LocalDate dateDebut, LocalDate dateFin,
@@ -89,6 +102,8 @@ public class DeclarationIRService {
             throw new BusinessException("Exercice deja declare : " + annee);
         }
 
+        int anneeCourante = LocalDate.now().getYear();
+
         // Annee >= annee d'immatriculation
         if (c.getDateImmatriculation() != null
                 && annee < c.getDateImmatriculation().getYear()) {
@@ -97,12 +112,21 @@ public class DeclarationIRService {
                 + c.getDateImmatriculation().getYear() + ")");
         }
 
+        // Annee <= annee courante
+        if (annee > anneeCourante) {
+            throw new BusinessException(
+                "L annee ne peut pas etre dans le futur (max " + anneeCourante + ")");
+        }
+
         if (dateDebut == null || dateFin == null || !dateFin.isAfter(dateDebut)) {
-            throw new BusinessException("Dates invalides");
+            throw new BusinessException("Dates invalides (date fin > date debut)");
         }
         long mois = java.time.temporal.ChronoUnit.MONTHS.between(dateDebut, dateFin);
         if (mois > 18) {
             throw new BusinessException("Exercice > 18 mois interdit");
+        }
+        if (mois < 12) {
+            throw new BusinessException("Exercice < 12 mois interdit (sauf premier exercice)");
         }
 
         Agent agent = agentRepository.findById(idAgent)
@@ -135,13 +159,32 @@ public class DeclarationIRService {
         return declarationRepository.save(d);
     }
 
+    /**
+     * Modifie le CA HT.
+     *
+     * Validation : si le contribuable est en regime REEL_OBLIGATOIRE,
+     * le CA doit etre >= 400 000 000 Ar.
+     */
     @Transactional
     public DeclarationIR modifierCaHt(Long idDeclaration, Long caHt) {
         DeclarationIR d = trouverParId(idDeclaration);
         verifierModifiable(d);
+
         if (caHt == null || caHt < 0) {
             throw new BusinessException("CA HT invalide");
         }
+
+        // Validation regime REEL_OBLIGATOIRE
+        Contribuable c = d.getContribuable();
+        if (c != null && "REEL_OBLIGATOIRE".equals(c.getRegime())) {
+            if (caHt < SEUIL_REEL_OBLIGATOIRE) {
+                throw new BusinessException(
+                    "Regime REEL OBLIGATOIRE : le CA doit etre >= "
+                    + String.format("%,d", SEUIL_REEL_OBLIGATOIRE).replace(',', ' ')
+                    + " Ar");
+            }
+        }
+
         d.setCaHt(caHt);
         return declarationRepository.save(d);
     }
