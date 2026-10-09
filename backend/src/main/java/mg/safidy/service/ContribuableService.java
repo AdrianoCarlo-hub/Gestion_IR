@@ -68,10 +68,10 @@ public class ContribuableService {
     @Transactional
     public Contribuable modifier(Long id, Contribuable c) {
         Contribuable existant = trouverParId(id);
-        if (!existant.getNif().equals(c.getNif()) && contribuableRepository.existsByNif(c.getNif())) {
-            throw new BusinessException("NIF deja utilise : " + c.getNif());
-        }
         valider(c, false);
+        if (!existant.getNif().equals(c.getNif()) && contribuableRepository.existsByNif(c.getNif())) {
+            throw new BusinessException("Ce NIF existe deja : " + c.getNif());
+        }
         existant.setNif(c.getNif());
         existant.setStat(c.getStat());
         existant.setRaisonSociale(c.getRaisonSociale());
@@ -100,28 +100,107 @@ public class ContribuableService {
         return contribuableRepository.save(c);
     }
 
+    /**
+     * Validations metier strictes.
+     *
+     * Regles :
+     *  - NIF : 10 chiffres exactement, unique
+     *  - CIN : 12 chiffres, le 6e chiffre doit etre 0 ou 1
+     *  - STAT : 17 chiffres si renseigne
+     *  - Telephone : 10 chiffres commencant par 031, 032, 033, 034 ou 038
+     *  - Date immatriculation : dans le passe, >= 1900
+     *  - Raison sociale, dirigeant, adresse : obligatoires
+     */
     private void valider(Contribuable c, boolean creation) {
+        // NIF : 10 chiffres
         if (c.getNif() == null || !c.getNif().matches("\\d{10}")) {
             throw new BusinessException("NIF : 10 chiffres requis");
         }
         if (creation && contribuableRepository.existsByNif(c.getNif())) {
-            throw new BusinessException("NIF deja utilise : " + c.getNif());
+            throw new BusinessException("Ce NIF existe deja : " + c.getNif());
         }
+
+        // STAT : 17 chiffres si renseigne
+        if (c.getStat() != null && !c.getStat().isBlank()
+                && !c.getStat().matches("\\d{17}")) {
+            throw new BusinessException("STAT : 17 chiffres si renseigne");
+        }
+
+        // CIN : 12 chiffres dont le 6e doit etre 0 ou 1
+        if (c.getCinDirigeant() == null || c.getCinDirigeant().isBlank()) {
+            throw new BusinessException("CIN du dirigeant obligatoire");
+        }
+        if (!c.getCinDirigeant().matches("\\d{12}")) {
+            throw new BusinessException("CIN : 12 chiffres requis");
+        }
+        // Le 6e chiffre (index 5) doit etre 0 ou 1
+        char sixiemeChiffre = c.getCinDirigeant().charAt(5);
+        if (sixiemeChiffre != '0' && sixiemeChiffre != '1') {
+            throw new BusinessException("CIN : le 6eme chiffre doit etre 0 ou 1");
+        }
+
+        // Telephone : 10 chiffres, prefixe 031/032/033/034/038
+        if (c.getTelephone() != null && !c.getTelephone().isBlank()) {
+            if (!c.getTelephone().matches("\\d{10}")) {
+                throw new BusinessException("Telephone : 10 chiffres requis");
+            }
+            String prefixe = c.getTelephone().substring(0, 3);
+            if (!prefixe.equals("031") && !prefixe.equals("032")
+                    && !prefixe.equals("033") && !prefixe.equals("034")
+                    && !prefixe.equals("038")) {
+                throw new BusinessException(
+                    "Telephone : doit commencer par 031, 032, 033, 034 ou 038");
+            }
+        }
+
+        // Raison sociale obligatoire
         if (c.getRaisonSociale() == null || c.getRaisonSociale().isBlank()) {
             throw new BusinessException("Raison sociale obligatoire");
         }
-        if (c.getCinDirigeant() == null || !c.getCinDirigeant().matches("\\d{12}")) {
-            throw new BusinessException("CIN : 12 chiffres requis");
+        if (c.getRaisonSociale().trim().length() < 2
+                || c.getRaisonSociale().trim().length() > 150) {
+            throw new BusinessException("Raison sociale : 2 a 150 caracteres");
         }
-        if (c.getStat() != null && !c.getStat().isBlank() && !c.getStat().matches("\\d{17}")) {
-            throw new BusinessException("STAT : 17 chiffres si renseigne");
+
+        // Nom du dirigeant
+        if (c.getNomDirigeant() == null || c.getNomDirigeant().isBlank()) {
+            throw new BusinessException("Nom du dirigeant obligatoire");
         }
-        if (c.getTelephone() != null && !c.getTelephone().isBlank()
-                && !c.getTelephone().matches("0\\d{9}")) {
-            throw new BusinessException("Telephone : 10 chiffres attendus");
+
+        // Adresse
+        if (c.getAdresse() == null || c.getAdresse().isBlank()) {
+            throw new BusinessException("Adresse obligatoire");
         }
-        if (c.getDateImmatriculation() != null && c.getDateImmatriculation().isAfter(LocalDate.now())) {
+
+        // Date d'immatriculation : dans le passe, >= 1900
+        if (c.getDateImmatriculation() == null) {
+            throw new BusinessException("Date d'immatriculation obligatoire");
+        }
+        if (c.getDateImmatriculation().isAfter(LocalDate.now())) {
             throw new BusinessException("Date d'immatriculation dans le futur interdite");
+        }
+        if (c.getDateImmatriculation().getYear() < 1900) {
+            throw new BusinessException("Date d'immatriculation invalide (>= 1900)");
+        }
+
+        // Mois cloture : 1 a 12
+        if (c.getMoisCloture() != null
+                && (c.getMoisCloture() < 1 || c.getMoisCloture() > 12)) {
+            throw new BusinessException("Mois de cloture : 1 a 12");
+        }
+
+        // Forme juridique
+        if (c.getFormeJuridique() == null || c.getFormeJuridique().isBlank()) {
+            throw new BusinessException("Forme juridique obligatoire");
+        }
+
+        // Regime
+        if (c.getRegime() == null || c.getRegime().isBlank()) {
+            throw new BusinessException("Regime obligatoire");
+        }
+        if (!c.getRegime().equals("REEL_OBLIGATOIRE")
+                && !c.getRegime().equals("REEL_OPTION")) {
+            throw new BusinessException("Regime invalide (REEL_OBLIGATOIRE ou REEL_OPTION)");
         }
     }
 
