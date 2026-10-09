@@ -17,10 +17,95 @@ const vide = {
   moisCloture: 12,
 };
 
-// Retire tout caractere non-numerique d'une chaine
+// Retire tout caractere non-numerique
 const onlyDigits = (str, maxLen) => {
   const digits = (str || '').replace(/\D/g, '');
   return maxLen ? digits.slice(0, maxLen) : digits;
+};
+
+// Prefixes telephone Madagascar autorises
+const PREFIXES_TEL = ['031', '032', '033', '034', '038'];
+
+/**
+ * Valide un champ individuel et retourne le message d'erreur ou null.
+ * Permet la validation en temps reel pendant la frappe.
+ */
+const validerChamp = (name, value, form) => {
+  switch (name) {
+    case 'nif': {
+      if (!value) return null; // vide = pas d'erreur tant qu'on n'a rien tape
+      if (!/^\d{10}$/.test(value)) {
+        return 'NIF : 10 chiffres requis (' + value.length + '/10)';
+      }
+      return null;
+    }
+
+    case 'stat': {
+      if (!value) return null;
+      if (!/^\d{17}$/.test(value)) {
+        return 'STAT : 17 chiffres (' + value.length + '/17)';
+      }
+      return null;
+    }
+
+    case 'cinDirigeant': {
+      if (!value) return null;
+      if (!/^\d{12}$/.test(value)) {
+        return 'CIN : 12 chiffres (' + value.length + '/12)';
+      }
+      const sixieme = value.charAt(5);
+      if (sixieme !== '0' && sixieme !== '1') {
+        return 'CIN : le 6eme chiffre doit etre 0 ou 1 (actuel : ' + sixieme + ')';
+      }
+      return null;
+    }
+
+    case 'telephone': {
+      if (!value) return null;
+      if (!/^\d{10}$/.test(value)) {
+        return 'Telephone : 10 chiffres (' + value.length + '/10)';
+      }
+      const prefixe = value.slice(0, 3);
+      if (!PREFIXES_TEL.includes(prefixe)) {
+        return 'Doit commencer par 031, 032, 033, 034 ou 038';
+      }
+      return null;
+    }
+
+    case 'email': {
+      if (!value) return null;
+      if (!/^[\w.+-]+@[\w-]+\.[\w.-]+$/.test(value)) {
+        return 'E-mail invalide';
+      }
+      return null;
+    }
+
+    case 'raisonSociale': {
+      if (!value) return null;
+      if (value.trim().length < 2) {
+        return 'Raison sociale : 2 caracteres minimum';
+      }
+      return null;
+    }
+
+    case 'dateImmatriculation': {
+      if (!value) return null;
+      const d = new Date(value);
+      if (d > new Date()) return 'Date dans le futur interdite';
+      if (d.getFullYear() < 1900) return 'Date invalide (>= 1900)';
+      return null;
+    }
+
+    case 'moisCloture': {
+      const mc = Number(value);
+      if (value === '' || value === null || value === undefined) return null;
+      if (mc < 1 || mc > 12) return 'Mois : 1 a 12';
+      return null;
+    }
+
+    default:
+      return null;
+  }
 };
 
 export default function ContribuableForm({ initial, onSubmit, onCancel }) {
@@ -35,95 +120,98 @@ export default function ContribuableForm({ initial, onSubmit, onCancel }) {
 
   useEffect(() => {
     setForm(initial || vide);
+    setErrors({});
   }, [initial]);
 
+  // Met a jour le champ + valide en temps reel
   const setField = (name, value) => {
-    setForm((f) => ({ ...f, [name]: value }));
-    setErrors((e) => ({ ...e, [name]: null }));
+    const next = { ...form, [name]: value };
+    setForm(next);
+
+    // Validation temps reel du champ modifie
+    const msg = validerChamp(name, value, next);
+    setErrors((prev) => ({ ...prev, [name]: msg }));
+
+    // Cas particulier : le prefixe telephone doit etre valide des le 3e chiffre
+    if (name === 'telephone' && value.length >= 3) {
+      const prefixe = value.slice(0, 3);
+      if (!PREFIXES_TEL.includes(prefixe)) {
+        setErrors((prev) => ({ ...prev, telephone: 'Doit commencer par 031, 032, 033, 034 ou 038' }));
+      }
+    }
+
+    // Cas CIN : valider le 6e chiffre des qu'il est tape
+    if (name === 'cinDirigeant' && value.length >= 6) {
+      const sixieme = value.charAt(5);
+      if (sixieme !== '0' && sixieme !== '1') {
+        setErrors((prev) => ({
+          ...prev,
+          cinDirigeant: 'CIN : le 6eme chiffre doit etre 0 ou 1 (actuel : ' + sixieme + ')',
+        }));
+      }
+    }
   };
 
-  // Bloque les touches qui ne sont pas des chiffres sur les champs numeriques
+  // Bloque les touches non-numeriques
   const handleNumericKeyDown = (e) => {
     const touchesAutorisees = [
       'Backspace', 'Delete', 'Tab', 'Escape', 'Enter',
       'ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End'
     ];
     if (touchesAutorisees.includes(e.key)) return;
-    if (e.ctrlKey || e.metaKey) return; // Ctrl+A, Ctrl+C, Ctrl+V...
+    if (e.ctrlKey || e.metaKey) return;
     if (!/^\d$/.test(e.key)) {
       e.preventDefault();
     }
   };
 
-  const valider = () => {
+  // Validation complete (au submit)
+  const validerTout = () => {
     const e = {};
 
-    // NIF : 10 chiffres
     if (!/^\d{10}$/.test(form.nif || '')) {
       e.nif = 'NIF : 10 chiffres requis';
     }
-
-    // STAT : 17 chiffres si renseigne
     if (form.stat && !/^\d{17}$/.test(form.stat)) {
       e.stat = 'STAT : 17 chiffres si renseigne';
     }
-
-    // CIN : 12 chiffres dont le 6e est 0 ou 1
     if (!/^\d{12}$/.test(form.cinDirigeant || '')) {
       e.cinDirigeant = 'CIN : 12 chiffres requis';
-    } else if (form.cinDirigeant.charAt(5) !== '0' && form.cinDirigeant.charAt(5) !== '1') {
-      e.cinDirigeant = 'CIN : le 6eme chiffre doit etre 0 ou 1';
+    } else {
+      const s = form.cinDirigeant.charAt(5);
+      if (s !== '0' && s !== '1') {
+        e.cinDirigeant = 'CIN : le 6eme chiffre doit etre 0 ou 1';
+      }
     }
-
-    // Telephone : 10 chiffres, prefixe 031/032/033/034/038
-    if (form.telephone && !/^\d{10}$/.test(form.telephone)) {
-      e.telephone = 'Telephone : 10 chiffres requis';
-    } else if (form.telephone) {
-      const p = form.telephone.slice(0, 3);
-      if (!['031', '032', '033', '034', '038'].includes(p)) {
+    if (form.telephone) {
+      if (!/^\d{10}$/.test(form.telephone)) {
+        e.telephone = 'Telephone : 10 chiffres requis';
+      } else if (!PREFIXES_TEL.includes(form.telephone.slice(0, 3))) {
         e.telephone = 'Doit commencer par 031, 032, 033, 034 ou 038';
       }
     }
-
-    // Email
     if (form.email && !/^[\w.+-]+@[\w-]+\.[\w.-]+$/.test(form.email)) {
       e.email = 'E-mail invalide';
     }
-
-    // Raison sociale
     if (!form.raisonSociale || form.raisonSociale.trim().length < 2) {
       e.raisonSociale = 'Raison sociale obligatoire (min 2 caracteres)';
     }
-
-    // Nom dirigeant
     if (!form.nomDirigeant || form.nomDirigeant.trim().length === 0) {
       e.nomDirigeant = 'Nom du dirigeant obligatoire';
     }
-
-    // Adresse
     if (!form.adresse || form.adresse.trim().length === 0) {
       e.adresse = 'Adresse obligatoire';
     }
-
-    // Secteur
     if (!form.idSecteur) {
       e.idSecteur = 'Secteur obligatoire';
     }
-
-    // Date immatriculation
     if (!form.dateImmatriculation) {
       e.dateImmatriculation = 'Date obligatoire';
     } else {
       const d = new Date(form.dateImmatriculation);
-      if (d > new Date()) {
-        e.dateImmatriculation = 'Date dans le futur interdite';
-      }
-      if (d.getFullYear() < 1900) {
-        e.dateImmatriculation = 'Date invalide (>= 1900)';
-      }
+      if (d > new Date()) e.dateImmatriculation = 'Date dans le futur interdite';
+      if (d.getFullYear() < 1900) e.dateImmatriculation = 'Date invalide (>= 1900)';
     }
-
-    // Mois cloture
     const mc = Number(form.moisCloture);
     if (!mc || mc < 1 || mc > 12) {
       e.moisCloture = 'Mois de cloture : 1 a 12';
@@ -135,7 +223,7 @@ export default function ContribuableForm({ initial, onSubmit, onCancel }) {
 
   const handleSubmit = async (ev) => {
     ev.preventDefault();
-    if (!valider()) return;
+    if (!validerTout()) return;
     setLoading(true);
     try {
       await onSubmit({
@@ -150,8 +238,8 @@ export default function ContribuableForm({ initial, onSubmit, onCancel }) {
   };
 
   return (
-    <form className="form-panel" onSubmit={handleSubmit}>
-      {/* ===== Identite fiscale ===== */}
+    <form className="form-panel" onSubmit={handleSubmit} noValidate>
+      {/* Identite fiscale */}
       <h3 className="section-title">Identite fiscale</h3>
       <div className="form-row">
         <div className="form-group">
@@ -182,7 +270,7 @@ export default function ContribuableForm({ initial, onSubmit, onCancel }) {
         </div>
       </div>
 
-      {/* ===== Identification ===== */}
+      {/* Identification */}
       <h3 className="section-title">Identification</h3>
       <div className="form-row">
         <div className="form-group" style={{ flex: 2 }}>
@@ -211,7 +299,7 @@ export default function ContribuableForm({ initial, onSubmit, onCancel }) {
         </div>
       </div>
 
-      {/* ===== Dirigeant ===== */}
+      {/* Dirigeant */}
       <h3 className="section-title">Dirigeant</h3>
       <div className="form-row">
         <div className="form-group">
@@ -233,12 +321,13 @@ export default function ContribuableForm({ initial, onSubmit, onCancel }) {
             value={form.cinDirigeant}
             onKeyDown={handleNumericKeyDown}
             onChange={(e) => setField('cinDirigeant', onlyDigits(e.target.value, 12))}
+            placeholder="101230456789"
           />
           {errors.cinDirigeant && <span className="error-msg">{errors.cinDirigeant}</span>}
         </div>
       </div>
 
-      {/* ===== Coordonnees ===== */}
+      {/* Coordonnees */}
       <h3 className="section-title">Coordonnees</h3>
       <div className="form-row">
         <div className="form-group" style={{ flex: 2 }}>
@@ -251,7 +340,7 @@ export default function ContribuableForm({ initial, onSubmit, onCancel }) {
           {errors.adresse && <span className="error-msg">{errors.adresse}</span>}
         </div>
         <div className="form-group">
-          <label className="form-label">Telephone (10 chiffres, 031/032/033/034/038)</label>
+          <label className="form-label">Telephone (031/032/033/034/038)</label>
           <input
             type="text"
             inputMode="numeric"
@@ -279,7 +368,7 @@ export default function ContribuableForm({ initial, onSubmit, onCancel }) {
         </div>
       </div>
 
-      {/* ===== Informations fiscales ===== */}
+      {/* Informations fiscales */}
       <h3 className="section-title">Informations fiscales</h3>
       <div className="form-row">
         <div className="form-group">
