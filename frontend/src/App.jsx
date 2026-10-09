@@ -5,6 +5,7 @@ import Layout from './components/Layout';
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
 import Contribuables from './pages/Contribuables';
+import ContribuableFiche from './pages/ContribuableFiche';
 import Declarations from './pages/Declarations';
 import Deficits from './pages/Deficits';
 import Acomptes from './pages/Acomptes';
@@ -28,6 +29,7 @@ export default function App() {
           >
             <Route path="/dashboard" element={<Dashboard />} />
             <Route path="/contribuables" element={<Contribuables />} />
+            <Route path="/contribuables/:id" element={<ContribuableFiche />} />
             <Route path="/declarations" element={<Declarations />} />
             <Route path="/deficits" element={<Deficits />} />
             <Route path="/acomptes" element={<Acomptes />} />

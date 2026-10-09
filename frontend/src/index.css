@@ -867,3 +867,56 @@ button:focus-visible {
   25%      { transform: translateX(-3px); }
   75%      { transform: translateX(3px); }
 }
+
+/* ===== Fiche contribuable ===== */
+.info-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.info-table td {
+  padding: 8px 4px;
+  border-bottom: 1px solid var(--border);
+}
+
+.info-table tr:last-child td { border-bottom: none; }
+
+.info-table td:first-child {
+  color: var(--gray);
+  width: 40%;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+/* ===== SearchBar avec icone ===== */
+.search-input-wrapper {
+  position: relative;
+  flex: 1;
+  min-width: 200px;
+}
+
+.search-input-wrapper .search-icon {
+  position: absolute;
+  left: 14px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: #94a3b8;
+  pointer-events: none;
+}
+
+.search-input-wrapper .search-input {
+  padding-left: 42px;
+}
+
+/* Bouton avec icone */
+.btn-primary svg,
+.btn-secondary svg {
+  vertical-align: middle;
+  margin-right: 4px;
+}
+
+.btn-link svg {
+  vertical-align: middle;
+}
