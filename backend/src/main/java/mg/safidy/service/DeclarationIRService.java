@@ -20,10 +20,14 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.Arrays;
 import java.util.List;
 
 @Service
 public class DeclarationIRService {
+
+    private static final List<String> CATEGORIES_VALIDES =
+        Arrays.asList("SALAIRE", "LOYER", "ELECTRICITE", "TRANSPORT", "AUTRE");
 
     private final DeclarationIRRepository declarationRepository;
     private final ContribuableRepository contribuableRepository;
@@ -85,6 +89,14 @@ public class DeclarationIRService {
             throw new BusinessException("Exercice deja declare : " + annee);
         }
 
+        // Annee >= annee d'immatriculation
+        if (c.getDateImmatriculation() != null
+                && annee < c.getDateImmatriculation().getYear()) {
+            throw new BusinessException(
+                "L annee doit etre >= a l annee d immatriculation ("
+                + c.getDateImmatriculation().getYear() + ")");
+        }
+
         if (dateDebut == null || dateFin == null || !dateFin.isAfter(dateDebut)) {
             throw new BusinessException("Dates invalides");
         }
@@ -134,18 +146,38 @@ public class DeclarationIRService {
         return declarationRepository.save(d);
     }
 
+    /**
+     * Ajoute une ligne de charge a la declaration.
+     * Le champ "libelle" a ete supprime.
+     * Si categorie = AUTRE, categorieLibre est obligatoire.
+     */
     @Transactional
-    public LigneCharge ajouterCharge(Long idDeclaration, String categorie, String libelle,
+    public LigneCharge ajouterCharge(Long idDeclaration, String categorie, String categorieLibre,
                                       Long montantAr, String justificatifRef) {
         DeclarationIR d = trouverParId(idDeclaration);
         verifierModifiable(d);
+
         if (montantAr == null || montantAr <= 0) {
             throw new BusinessException("Montant de charge > 0 requis");
         }
+        if (categorie == null || !CATEGORIES_VALIDES.contains(categorie)) {
+            throw new BusinessException("Categorie de charge invalide");
+        }
+        if ("AUTRE".equals(categorie)) {
+            if (categorieLibre == null || categorieLibre.isBlank()) {
+                throw new BusinessException("Precisez la categorie libre");
+            }
+            if (categorieLibre.trim().length() < 2 || categorieLibre.trim().length() > 50) {
+                throw new BusinessException("Categorie libre : 2 a 50 caracteres");
+            }
+        } else {
+            categorieLibre = null;
+        }
+
         LigneCharge lc = new LigneCharge();
         lc.setDeclaration(d);
         lc.setCategorie(categorie);
-        lc.setLibelle(libelle);
+        lc.setCategorieLibre(categorieLibre);
         lc.setMontantAr(montantAr);
         lc.setJustificatifRef(justificatifRef);
         return ligneChargeRepository.save(lc);

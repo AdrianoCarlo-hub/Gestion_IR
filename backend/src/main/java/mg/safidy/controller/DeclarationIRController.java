@@ -1,10 +1,11 @@
 package mg.safidy.controller;
 
+import mg.safidy.config.AuditLogger;
+import mg.safidy.exception.BusinessException;
 import mg.safidy.model.DeclarationIR;
 import mg.safidy.model.LigneCharge;
+import mg.safidy.repository.DeclarationIRRepository;
 import mg.safidy.service.DeclarationIRService;
-import mg.safidy.config.AuditLogger;
-import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -17,10 +18,14 @@ import java.util.Map;
 public class DeclarationIRController {
 
     private final DeclarationIRService service;
+    private final DeclarationIRRepository repo;
     private final AuditLogger audit;
 
-    public DeclarationIRController(DeclarationIRService service, AuditLogger audit) {
+    public DeclarationIRController(DeclarationIRService service,
+                                     DeclarationIRRepository repo,
+                                     AuditLogger audit) {
         this.service = service;
+        this.repo = repo;
         this.audit = audit;
     }
 
@@ -65,7 +70,7 @@ public class DeclarationIRController {
     public ResponseEntity<LigneCharge> ajouterCharge(@PathVariable Long id,
                                                       @RequestBody LigneCharge lc) {
         return ResponseEntity.ok(service.ajouterCharge(id, lc.getCategorie(),
-                lc.getLibelle(), lc.getMontantAr(), lc.getJustificatifRef()));
+                lc.getCategorieLibre(), lc.getMontantAr(), lc.getJustificatifRef()));
     }
 
     @DeleteMapping("/charges/{idLigne}")
@@ -98,6 +103,27 @@ public class DeclarationIRController {
 
     @PostMapping("/{id}/marquer-payee")
     public ResponseEntity<DeclarationIR> marquerPayee(@PathVariable Long id) {
-        return ResponseEntity.ok(service.marquerPayee(id));
+        DeclarationIR saved = service.marquerPayee(id);
+        audit.log("MARQUER_PAYEE", "declaration_ir", id, null);
+        return ResponseEntity.ok(saved);
+    }
+
+    @PatchMapping("/{id}/statut")
+    public DeclarationIR changerStatut(@PathVariable Long id, @RequestBody Map<String, String> body) {
+        String statut = body.get("statut");
+        if (statut == null || !(statut.equals("BROUILLON") || statut.equals("VALIDEE")
+                || statut.equals("PAYEE") || statut.equals("EN_RETARD"))) {
+            throw new BusinessException("Statut invalide : " + statut);
+        }
+        DeclarationIR d = service.trouverParId(id);
+        String ancien = d.getStatut();
+        d.setStatut(statut);
+        if ("VALIDEE".equals(statut) && d.getDateDepot() == null) {
+            d.setDateDepot(LocalDate.now());
+        }
+        repo.save(d);
+        audit.log("CHANGEMENT_STATUT_DECLARATION", "declaration_ir", id,
+                  "ancien=" + ancien + " nouveau=" + statut);
+        return d;
     }
 }

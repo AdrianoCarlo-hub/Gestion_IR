@@ -26,8 +26,8 @@ public class LigneCharge {
     @Column(name = "categorie", nullable = false, length = 20)
     private String categorie;
 
-    @Column(name = "libelle", nullable = false, length = 120)
-    private String libelle;
+    @Column(name = "categorie_libre", length = 50)
+    private String categorieLibre;
 
     @Column(name = "montant_ar", nullable = false)
     private Long montantAr;
@@ -62,12 +62,12 @@ public class LigneCharge {
         this.categorie = categorie;
     }
 
-    public String getLibelle() {
-        return libelle;
+    public String getCategorieLibre() {
+        return categorieLibre;
     }
 
-    public void setLibelle(String libelle) {
-        this.libelle = libelle;
+    public void setCategorieLibre(String categorieLibre) {
+        this.categorieLibre = categorieLibre;
     }
 
     public Long getMontantAr() {
