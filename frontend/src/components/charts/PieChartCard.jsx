@@ -1,6 +1,12 @@
 import {
-  PieChart, Pie, Cell, Tooltip, Legend, ResponsiveContainer,
+  PieChart as RechartsPieChart,
+  Pie,
+  Cell,
+  Tooltip,
+  Legend,
+  ResponsiveContainer,
 } from 'recharts';
+import { LuChartPie } from "react-icons/lu";
 
 const COULEURS = [
   '#1a5c4a', '#10b981', '#34d399', '#f59e0b',
@@ -11,10 +17,15 @@ const COULEURS = [
 export default function PieChartCard({ titre, data, cleNom, cleValeur }) {
   return (
     <div className="chart-card">
-      <h3 className="chart-title">{titre}</h3>
+      <h3 className="chart-title">
+        <LuChartPie
+          style={{ width: 18, height: 18, verticalAlign: 'middle', marginRight: 8 }}
+        />
+        {titre}
+      </h3>
       <div style={{ width: '100%', height: 320 }}>
         <ResponsiveContainer>
-          <PieChart>
+          <RechartsPieChart>
             <Pie
               data={data}
               dataKey={cleValeur}
@@ -29,6 +40,7 @@ export default function PieChartCard({ titre, data, cleNom, cleValeur }) {
               }
               labelLine={false}
               fontSize={11}
+              animationDuration={500}
             >
               {data.map((entry, index) => (
                 <Cell key={index} fill={COULEURS[index % COULEURS.length]} />
@@ -39,11 +51,19 @@ export default function PieChartCard({ titre, data, cleNom, cleValeur }) {
               contentStyle={{
                 borderRadius: 8,
                 border: '1px solid #e2e8f0',
+                boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
                 fontSize: 12,
+                background: '#ffffff',
               }}
+              itemStyle={{ color: '#1e293b' }}
             />
-            <Legend wrapperStyle={{ fontSize: 12 }} />
-          </PieChart>
+            <Legend
+              wrapperStyle={{ fontSize: 12, paddingTop: 10 }}
+              align="center"
+              iconType="circle"
+              iconSize={10}
+            />
+          </RechartsPieChart>
         </ResponsiveContainer>
       </div>
     </div>
