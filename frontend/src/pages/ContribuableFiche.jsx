@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { trouver } from '../services/contribuableService';
 import * as situationService from '../services/situationService';
-import * as exportService from '../services/exportService';
 import { LoadingBlock } from '../components/Spinner';
 import {
   LuArrowLeft,
@@ -11,7 +10,6 @@ import {
   LuCreditCard,
   LuTriangleAlert,
   LuCircleCheck,
-  LuDownload,
 } from 'react-icons/lu';
 
 const fmt = (n) =>
@@ -42,7 +40,6 @@ export default function ContribuableFiche() {
   if (error) return <div className="page"><div className="alert-error">{error}</div></div>;
   if (!contribuable) return null;
 
-  // Determiner le statut fiscal global
   const statutFiscal = (() => {
     if (!situation) return 'inconnu';
     if (situation.enRetard) return 'retard';
@@ -51,10 +48,10 @@ export default function ContribuableFiche() {
   })();
 
   const badgeConfig = {
-    a_jour: { classe: 'badge-actif', label: 'A jour', icone: LuCircleCheck },
-    a_payer: { classe: 'badge-suspendu', label: 'A payer', icone: LuFileText },
-    retard: { classe: 'badge-radie', label: 'En retard', icone: LuTriangleAlert },
-    inconnu: { classe: 'badge-cesse', label: 'Inconnu', icone: LuFileText },
+    a_jour:  { classe: 'badge-actif',    label: 'A jour',    icone: LuCircleCheck },
+    a_payer: { classe: 'badge-suspendu', label: 'A payer',   icone: LuFileText },
+    retard:  { classe: 'badge-radie',    label: 'En retard', icone: LuTriangleAlert },
+    inconnu: { classe: 'badge-cesse',    label: 'Inconnu',   icone: LuFileText },
   };
   const Badge = badgeConfig[statutFiscal];
   const IconeBadge = Badge.icone;
@@ -86,13 +83,6 @@ export default function ContribuableFiche() {
             <IconeBadge size={14} />
             {Badge.label}
           </span>
-          <button
-            className="btn-secondary"
-            style={{ marginTop: 0 }}
-            onClick={() => exportService.exportContribuables()}
-          >
-            <LuDownload size={14} /> Exporter Excel
-          </button>
         </div>
       </div>
 
