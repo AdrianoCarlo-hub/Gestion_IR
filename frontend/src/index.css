@@ -182,8 +182,7 @@ body {
   display: flex;
   flex-direction: column;
   flex-shrink: 0;
-  overflow-y: auto;
-  overflow-x: hidden;
+  overflow: visible;
   transition: width 0.25s cubic-bezier(0.4, 0, 0.2, 1);
   z-index: 100;
   box-shadow: 2px 0 12px rgba(0, 0, 0, 0.08);
@@ -219,6 +218,7 @@ body {
   display: flex;
   flex-direction: column;
   overflow-y: auto;
+  overflow-x: hidden;
 }
 
 .nav-item {
@@ -285,10 +285,10 @@ body {
 .sidebar-collapse {
   position: absolute;
   top: 50%;
-  right: -14px;
+  right: -18px;
   transform: translateY(-50%);
-  width: 28px;
-  height: 28px;
+  width: 32px;
+  height: 32px;
   border-radius: 50%;
   background: var(--accent);
   color: white;
@@ -298,13 +298,16 @@ body {
   align-items: center;
   justify-content: center;
   padding: 0;
-  z-index: 20;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+  z-index: 9999;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
   transition: background 0.15s, transform 0.15s;
 }
 .sidebar-collapse:hover {
   background: var(--accent-hover);
-  transform: translateY(-50%) scale(1.1);
+  transform: translateY(-50%) scale(1.15);
+}
+.sidebar-collapse:active {
+  transform: translateY(-50%) scale(0.95);
 }
 
 .sidebar.collapsed .brand-text,
@@ -322,6 +325,8 @@ body {
   min-height: 100vh;
   overflow-x: hidden;
   transition: margin-left 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative;
+  z-index: 1;
 }
 
 .sidebar.collapsed ~ .app-main {

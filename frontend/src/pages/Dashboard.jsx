@@ -6,7 +6,8 @@ import BarChartCard from '../components/charts/BarChartCard';
 import PieChartCard from '../components/charts/PieChartCard';
 import { LuUsers, LuFileText, LuCreditCard, LuCalendar } from 'react-icons/lu';
 
-const fmt = (n) => (n == null ? '0' : Number(n).toLocaleString('fr-FR').replace(/\u202f|\u00a0/g, ' '));
+const fmt = (n) =>
+  n == null ? '0' : Number(n).toLocaleString('fr-FR').replace(/\u202f|\u00a0/g, ' ');
 
 export default function Dashboard() {
   const { agent } = useAuth();
@@ -50,7 +51,6 @@ export default function Dashboard() {
 
       {stats && (
         <>
-          {/* 4 cartes KPI compactes */}
           <div className="cards-grid">
             <div className="stat-card">
               <LuUsers className="stat-icon" size={20} />
@@ -74,7 +74,6 @@ export default function Dashboard() {
             </div>
           </div>
 
-          {/* 4 cartes financieres compactes */}
           <div className="cards-grid financial">
             <div className="stat-card accent">
               <span className="stat-label">IR total du ({annee})</span>
@@ -100,7 +99,6 @@ export default function Dashboard() {
             </div>
           </div>
 
-          {/* Graphiques */}
           <div className="charts-grid-2">
             <BarChartCard
               titre="IR du par annee"
