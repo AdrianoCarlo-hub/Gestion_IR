@@ -1,12 +1,13 @@
 import { useEffect, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
+import SearchBar from '../components/SearchBar';
 import { lister as listerContribuables } from '../services/contribuableService';
 import { lister as listerDeclarations } from '../services/declarationService';
 import * as service from '../services/paiementService';
 import * as exportService from '../services/exportService';
 import ConfirmDialog from '../components/ConfirmDialog';
 import { useToast } from '../context/ToastContext';
-import { LoadingBlock, SkeletonTable } from '../components/Spinner';
+import { SkeletonTable } from '../components/Spinner';
 import { LuPlus, LuDownload, LuUser, LuFileText, LuCreditCard, LuCalendar, LuDollarSign, LuTriangleAlert, LuX, LuTrash2, LuPrinter } from "react-icons/lu";
 
 const fmt = (n) => (n == null ? '0' : Number(n).toLocaleString('fr-FR').replace(/\u202f|\u00a0/g, ' '));
@@ -17,11 +18,13 @@ export default function Paiements() {
   const toast = useToast();
   const [confirm, setConfirm] = useState(null);
   const [liste, setListe] = useState([]);
+  const [listeFiltree, setListeFiltree] = useState([]);
   const [contribuables, setContribuables] = useState([]);
   const [declarations, setDeclarations] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [showForm, setShowForm] = useState(false);
+  const [recherche, setRecherche] = useState('');
 
   const [form, setForm] = useState({
     idContribuable: '',
@@ -37,6 +40,7 @@ export default function Paiements() {
     try {
       const data = await service.lister();
       setListe(data);
+      setListeFiltree(data);
     } catch (e) {
       setError(e.response?.data?.message || 'Erreur');
     } finally {
@@ -49,6 +53,21 @@ export default function Paiements() {
     listerContribuables().then(setContribuables).catch(() => {});
     listerDeclarations().then(setDeclarations).catch(() => {});
   }, []);
+
+  useEffect(() => {
+    if (!recherche) {
+      setListeFiltree(liste);
+      return;
+    }
+    const r = recherche.toLowerCase();
+    setListeFiltree(
+      liste.filter((p) =>
+        (p.referenceQuittance || '').toLowerCase().includes(r) ||
+        (p.contribuable?.raisonSociale || '').toLowerCase().includes(r) ||
+        (p.contribuable?.nif || '').includes(r)
+      )
+    );
+  }, [recherche, liste]);
 
   const setF = (k, v) => setForm((f) => ({ ...f, [k]: v }));
 
@@ -105,7 +124,6 @@ export default function Paiements() {
     (d) => String(d.contribuable?.idContribuable) === String(form.idContribuable)
   );
 
-  // Calculer les totaux
   const totalMontant = liste.reduce((sum, p) => sum + (p.montantAr || 0), 0);
   const paiementsValides = liste.filter(p => !p.annule).length;
   const paiementsAnnules = liste.filter(p => p.annule).length;
@@ -116,16 +134,6 @@ export default function Paiements() {
         <div>
           <h1>Paiements</h1>
           <p className="page-sub">Enregistrement des paiements et quittances</p>
-        </div>
-        <div style={{ display: 'flex', gap: 8 }}>
-          <button className="btn btn-primary" onClick={() => setShowForm(!showForm)}>
-            <LuPlus className="icon" />
-            {showForm ? 'Fermer' : 'Nouveau paiement'}
-          </button>
-          <button className="btn btn-outline" onClick={() => exportService.exportPaiements()}>
-            <LuDownload className="icon" />
-            Exporter
-          </button>
         </div>
       </header>
 
@@ -138,7 +146,19 @@ export default function Paiements() {
         </div>
       )}
 
-      {/* Cartes de résumé */}
+      <SearchBar
+        value={recherche}
+        onChange={setRecherche}
+        placeholder="Recherche (quittance, contribuable, NIF)"
+      >
+        <button className="btn-primary" onClick={() => setShowForm(!showForm)}>
+          {showForm ? 'Fermer le formulaire' : '+ Nouveau paiement'}
+        </button>
+        <button className="btn-secondary" onClick={() => exportService.exportPaiements()}>
+          Exporter Excel
+        </button>
+      </SearchBar>
+
       <div className="cards-grid" style={{ marginBottom: 24 }}>
         <div className="stat-card">
           <div className="stat-card-header">
@@ -149,7 +169,7 @@ export default function Paiements() {
           <span className="stat-label">Total paiements</span>
           <span className="stat-value">{liste.length}</span>
         </div>
-        
+
         <div className="stat-card financial encaisse">
           <div className="stat-card-header">
             <div className="stat-card-icon">
@@ -159,7 +179,7 @@ export default function Paiements() {
           <span className="stat-label">Montant total</span>
           <span className="stat-value">{fmt(totalMontant)} Ar</span>
         </div>
-        
+
         <div className="stat-card financial ir-du">
           <div className="stat-card-header">
             <div className="stat-card-icon blue">
@@ -169,7 +189,7 @@ export default function Paiements() {
           <span className="stat-label">Valides</span>
           <span className="stat-value">{paiementsValides}</span>
         </div>
-        
+
         <div className="stat-card financial reste">
           <div className="stat-card-header">
             <div className="stat-card-icon orange">
@@ -286,7 +306,7 @@ export default function Paiements() {
 
       {loading ? (
         <SkeletonTable rows={5} cols={8} />
-      ) : liste.length === 0 ? (
+      ) : listeFiltree.length === 0 ? (
         <div className="empty-state">
           <div className="empty-state-icon">
             <LuCreditCard className="icon" />
@@ -310,7 +330,7 @@ export default function Paiements() {
               </tr>
             </thead>
             <tbody>
-              {liste.map((p) => (
+              {listeFiltree.map((p) => (
                 <tr key={p.idPaiement}>
                   <td><strong>{p.referenceQuittance}</strong></td>
                   <td>{p.contribuable ? p.contribuable.raisonSociale : '-'}</td>
@@ -354,7 +374,7 @@ export default function Paiements() {
           </table>
         </div>
       )}
-      <p className="table-footer">{liste.length} resultat(s)</p>
+      <p className="table-footer">{listeFiltree.length} resultat(s)</p>
 
       <ConfirmDialog
         ouvert={!!confirm}

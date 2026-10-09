@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import ContribuableForm from '../components/ContribuableForm';
 import StatutModal from '../components/StatutModal';
+import SearchBar from '../components/SearchBar';
 import { useToast } from '../context/ToastContext';
 import * as service from '../services/contribuableService';
 import * as statutService from '../services/statutService';
@@ -11,7 +12,6 @@ import {
   LuPencil,
   LuCircleAlert,
   LuPlus,
-  LuSearch,
   LuFileText,
 } from 'react-icons/lu';
 
@@ -47,15 +47,23 @@ export default function Contribuables() {
     }
   };
 
+  const chargerAvec = async (mc, st) => {
+    setLoading(true);
+    setError('');
+    try {
+      const data = await service.lister({ motCle: mc, statut: st });
+      setListe(data);
+    } catch (e) {
+      setError(e.response?.data?.message || 'Erreur de chargement');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
     charger();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-
-  const handleRecherche = (e) => {
-    e.preventDefault();
-    charger();
-  };
 
   const handleNouveau = () => {
     setEnEdition(null);
@@ -114,20 +122,21 @@ export default function Contribuables() {
 
       {mode === 'liste' && (
         <>
-          <form className="search-bar" onSubmit={handleRecherche}>
-            <div className="search-input-wrapper">
-              <LuSearch className="search-icon" size={16} />
-              <input
-                className="search-input form-input"
-                placeholder="Recherche (NIF, nom, STAT, telephone)"
-                value={motCle}
-                onChange={(e) => setMotCle(e.target.value)}
-              />
-            </div>
+          <SearchBar
+            value={motCle}
+            onChange={(v) => {
+              setMotCle(v);
+              chargerAvec(v, statut);
+            }}
+            placeholder="Recherche (NIF, nom, STAT, telephone)"
+          >
             <select
               className="form-input"
               value={statut}
-              onChange={(e) => setStatut(e.target.value)}
+              onChange={(e) => {
+                setStatut(e.target.value);
+                chargerAvec(motCle, e.target.value);
+              }}
               style={{ maxWidth: 180 }}
             >
               <option value="">Tous statuts</option>
@@ -136,13 +145,10 @@ export default function Contribuables() {
               <option value="CESSE">Cesse</option>
               <option value="RADIE">Radie</option>
             </select>
-            <button type="submit" className="btn-primary">
-              <LuSearch size={14} /> Rechercher
-            </button>
             <button type="button" className="btn-secondary" onClick={handleNouveau}>
               <LuPlus size={14} /> Nouveau contribuable
             </button>
-          </form>
+          </SearchBar>
 
           <div className="table-container">
             <table className="data-table">

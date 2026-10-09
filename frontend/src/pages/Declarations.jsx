@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
+import SearchBar from '../components/SearchBar';
 import { lister as listerContribuables } from '../services/contribuableService';
 import * as service from '../services/declarationService';
 import DeclarationForm from './DeclarationForm';
-import { LuSearch, LuPlus } from 'react-icons/lu';
+import { LuPlus } from 'react-icons/lu';
 
 const anneeCourante = new Date().getFullYear();
 const SEUIL_REEL_OBLIGATOIRE = 400000000;
@@ -37,16 +38,24 @@ export default function Declarations() {
     }
   };
 
+  const chargerAvec = async (a) => {
+    setLoading(true);
+    setError('');
+    try {
+      const data = await service.lister(a || undefined);
+      setListe(data);
+    } catch (e) {
+      setError(e.response?.data?.message || 'Erreur');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
     charger();
     listerContribuables().then(setContribuables).catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-
-  const handleRecherche = (e) => {
-    e.preventDefault();
-    charger();
-  };
 
   const handleNouvelle = () => {
     if (contribuables.length === 0) {
@@ -130,24 +139,18 @@ export default function Declarations() {
 
       {mode === 'liste' && (
         <>
-          <form className="search-bar" onSubmit={handleRecherche}>
-            <div className="search-input-wrapper">
-              <LuSearch className="search-icon" size={16} />
-              <input
-                type="number"
-                className="search-input form-input"
-                placeholder="Annee (ex: 2026)"
-                value={annee}
-                onChange={(e) => setAnnee(e.target.value)}
-              />
-            </div>
-            <button type="submit" className="btn-primary">
-              <LuSearch size={14} /> Rechercher
-            </button>
+          <SearchBar
+            value={annee}
+            onChange={(v) => {
+              setAnnee(v);
+              chargerAvec(v);
+            }}
+            placeholder="Recherche par annee (ex: 2026)"
+          >
             <button type="button" className="btn-secondary" onClick={handleNouvelle}>
               <LuPlus size={14} /> Nouvelle declaration
             </button>
-          </form>
+          </SearchBar>
 
           <div className="table-container">
             <table className="data-table">

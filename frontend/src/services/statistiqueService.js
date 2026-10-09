@@ -19,3 +19,8 @@ export const parStatut = async () => {
   const { data } = await api.get('/statistiques/par-statut');
   return data;
 };
+
+export const alertes = async () => {
+  const { data } = await api.get('/statistiques/alertes');
+  return data;
+};

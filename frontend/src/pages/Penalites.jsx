@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { lister as listerDeclarations } from '../services/declarationService';
 import * as service from '../services/penaliteService';
+import SearchBar from '../components/SearchBar';
 import { LoadingBlock, SkeletonTable } from '../components/Spinner';
 import { useToast } from '../context/ToastContext';
 import { LuTriangleAlert, LuCalendar, LuPercent, LuDollarSign, LuFileText, LuTrash2, LuCalculator, LuCircleAlert, LuCheck } from "react-icons/lu";
@@ -13,9 +14,12 @@ export default function Penalites() {
   const [declarations, setDeclarations] = useState([]);
   const [selected, setSelected] = useState('');
   const [penalites, setPenalites] = useState([]);
+  const [listeFiltree, setListeFiltree] = useState([]);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [date, setDate] = useState(today);
+  const [loading, setLoading] = useState(false);
+  const [recherche, setRecherche] = useState('');
 
   useEffect(() => {
     listerDeclarations().then(setDeclarations).catch(() => {});
@@ -23,14 +27,33 @@ export default function Penalites() {
 
   const charger = async (id) => {
     if (!id) return;
+    setLoading(true);
     try {
-      setPenalites(await service.parDeclaration(id));
+      const data = await service.parDeclaration(id);
+      setPenalites(data);
+      setListeFiltree(data);
     } catch (e) {
       setError(e.response?.data?.message || 'Erreur');
+    } finally {
+      setLoading(false);
     }
   };
 
   useEffect(() => { if (selected) charger(selected); }, [selected]);
+
+  useEffect(() => {
+    if (!recherche) {
+      setListeFiltree(penalites);
+      return;
+    }
+    const r = recherche.toLowerCase();
+    setListeFiltree(
+      penalites.filter((p) =>
+        (p.type || '').toLowerCase().includes(r) ||
+        (p.statut || '').toLowerCase().includes(r)
+      )
+    );
+  }, [recherche, penalites]);
 
   const handleAmende = async () => {
     setError(''); setSuccess('');
@@ -65,7 +88,6 @@ export default function Penalites() {
     }
   };
 
-  // Calculer les totaux
   const totalMontant = penalites.reduce((sum, p) => sum + (p.montantAr || 0), 0);
   const penalitesPayees = penalites.filter(p => p.statut === 'PAYEE').length;
   const penalitesDue = penalites.filter(p => p.statut === 'DUE').length;
@@ -96,7 +118,6 @@ export default function Penalites() {
         </div>
       )}
 
-      {/* Cartes de résumé */}
       {selected && penalites.length > 0 && (
         <div className="cards-grid" style={{ marginBottom: 24 }}>
           <div className="stat-card">
@@ -108,7 +129,7 @@ export default function Penalites() {
             <span className="stat-label">Total penalites</span>
             <span className="stat-value">{penalites.length}</span>
           </div>
-          
+
           <div className="stat-card financial ir-du">
             <div className="stat-card-header">
               <div className="stat-card-icon blue">
@@ -118,7 +139,7 @@ export default function Penalites() {
             <span className="stat-label">Montant total</span>
             <span className="stat-value">{fmt(totalMontant)} Ar</span>
           </div>
-          
+
           <div className="stat-card financial encaisse">
             <div className="stat-card-header">
               <div className="stat-card-icon">
@@ -128,7 +149,7 @@ export default function Penalites() {
             <span className="stat-label">Payees</span>
             <span className="stat-value">{penalitesPayees}</span>
           </div>
-          
+
           <div className="stat-card financial reste">
             <div className="stat-card-header">
               <div className="stat-card-icon orange">
@@ -183,59 +204,67 @@ export default function Penalites() {
       </div>
 
       {selected && (
-        <div className="table-container">
-          <table className="data-table">
-            <thead>
-              <tr>
-                <th>Type</th>
-                <th>Nb mois</th>
-                <th>Taux</th>
-                <th>Montant</th>
-                <th>Statut</th>
-                <th>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {loading ? (
-                <tr><td colSpan={6}><LoadingBlock message="Chargement..." /></td></tr>
-              ) : penalites.length === 0 ? (
-                <tr><td colSpan={6} style={{ textAlign: 'center' }}>Aucune penalite</td></tr>
-              ) : (
-                penalites.map((p) => (
-                  <tr key={p.idPenalite}>
-                    <td>
-                      <span className="badge badge-warning" style={{ fontSize: 11 }}>
-                        {p.type}
-                      </span>
-                    </td>
-                    <td>{p.nbMois}</td>
-                    <td>{p.tauxPct} %</td>
-                    <td><strong>{fmt(p.montantAr)} Ar</strong></td>
-                    <td>
-                      <span className={'badge badge-' + (p.statut === 'PAYEE' ? 'actif' : p.statut === 'DUE' ? 'suspendu' : 'radie')}>
-                        {p.statut}
-                      </span>
-                    </td>
-                    <td>
-                      {p.statut !== 'ANNULEE' && (
-                        <button 
-                          className="btn-icon delete"
-                          onClick={() => handleAnnuler(p.idPenalite)}
-                          title="Annuler"
-                        >
-                          <LuTrash2 className="icon" />
-                        </button>
-                      )}
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
+        <>
+          <SearchBar
+            value={recherche}
+            onChange={setRecherche}
+            placeholder="Recherche (type, statut)"
+          />
+
+          <div className="table-container">
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>Type</th>
+                  <th>Nb mois</th>
+                  <th>Taux</th>
+                  <th>Montant</th>
+                  <th>Statut</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {loading ? (
+                  <tr><td colSpan={6}><LoadingBlock message="Chargement..." /></td></tr>
+                ) : listeFiltree.length === 0 ? (
+                  <tr><td colSpan={6} style={{ textAlign: 'center' }}>Aucune penalite</td></tr>
+                ) : (
+                  listeFiltree.map((p) => (
+                    <tr key={p.idPenalite}>
+                      <td>
+                        <span className="badge badge-warning" style={{ fontSize: 11 }}>
+                          {p.type}
+                        </span>
+                      </td>
+                      <td>{p.nbMois}</td>
+                      <td>{p.tauxPct} %</td>
+                      <td><strong>{fmt(p.montantAr)} Ar</strong></td>
+                      <td>
+                        <span className={'badge badge-' + (p.statut === 'PAYEE' ? 'actif' : p.statut === 'DUE' ? 'suspendu' : 'radie')}>
+                          {p.statut}
+                        </span>
+                      </td>
+                      <td>
+                        {p.statut !== 'ANNULEE' && (
+                          <button 
+                            className="btn-icon delete"
+                            onClick={() => handleAnnuler(p.idPenalite)}
+                            title="Annuler"
+                          >
+                            <LuTrash2 className="icon" />
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+          <p className="table-footer">{listeFiltree.length} resultat(s)</p>
+        </>
       )}
     </div>
   );
 }
-
 

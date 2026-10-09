@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
 import { lister as listerContribuables } from '../services/contribuableService';
 import * as service from '../services/deficitService';
-import { LoadingBlock, SkeletonTable } from '../components/Spinner';
+import SearchBar from '../components/SearchBar';
+import { SkeletonTable } from '../components/Spinner';
 import { useToast } from '../context/ToastContext';
 import { LuPlus, LuTrendingDown, LuUser, LuCalendar, LuDollarSign, LuTriangleAlert, LuX, LuSave } from "react-icons/lu";
 
@@ -11,11 +12,13 @@ const anneeCourante = new Date().getFullYear();
 export default function Deficits() {
   const toast = useToast();
   const [liste, setListe] = useState([]);
+  const [listeFiltree, setListeFiltree] = useState([]);
   const [contribuables, setContribuables] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [showForm, setShowForm] = useState(false);
+  const [recherche, setRecherche] = useState('');
 
   const [form, setForm] = useState({
     idContribuable: '',
@@ -26,7 +29,9 @@ export default function Deficits() {
   const charger = async () => {
     setLoading(true);
     try {
-      setListe(await service.lister());
+      const data = await service.lister();
+      setListe(data);
+      setListeFiltree(data);
     } catch (e) {
       setError(e.response?.data?.message || 'Erreur');
     } finally {
@@ -38,6 +43,21 @@ export default function Deficits() {
     charger();
     listerContribuables().then(setContribuables).catch(() => {});
   }, []);
+
+  useEffect(() => {
+    if (!recherche) {
+      setListeFiltree(liste);
+      return;
+    }
+    const r = recherche.toLowerCase();
+    setListeFiltree(
+      liste.filter((d) =>
+        (d.contribuable?.raisonSociale || '').toLowerCase().includes(r) ||
+        (d.contribuable?.nif || '').includes(r) ||
+        String(d.anneeOrigine).includes(r)
+      )
+    );
+  }, [recherche, liste]);
 
   const setF = (k, v) => setForm((f) => ({ ...f, [k]: v }));
 
@@ -68,7 +88,6 @@ export default function Deficits() {
     }
   };
 
-  // Calculer les totaux
   const totalDeficit = liste.reduce((sum, d) => sum + (d.solde || 0), 0);
   const deficitsActifs = liste.filter(d => d.statut === 'ACTIF').length;
 
@@ -79,10 +98,6 @@ export default function Deficits() {
           <h1>Deficits</h1>
           <p className="page-sub">Stock de deficits reportables (5 ans)</p>
         </div>
-        <button className="btn btn-primary" onClick={() => setShowForm(true)}>
-          <LuPlus className="icon" />
-          Nouveau deficit
-        </button>
       </header>
 
       {error && (
@@ -102,7 +117,18 @@ export default function Deficits() {
         </div>
       )}
 
-      {/* Cartes de résumé */}
+      <SearchBar
+        value={recherche}
+        onChange={setRecherche}
+        placeholder="Recherche (contribuable, annee)"
+      >
+        {!showForm && (
+          <button className="btn-primary" onClick={() => setShowForm(true)}>
+            + Nouveau deficit
+          </button>
+        )}
+      </SearchBar>
+
       <div className="cards-grid" style={{ marginBottom: 24 }}>
         <div className="stat-card">
           <div className="stat-card-header">
@@ -113,7 +139,7 @@ export default function Deficits() {
           <span className="stat-label">Deficits actifs</span>
           <span className="stat-value">{deficitsActifs}</span>
         </div>
-        
+
         <div className="stat-card financial ir-du">
           <div className="stat-card-header">
             <div className="stat-card-icon orange">
@@ -123,7 +149,7 @@ export default function Deficits() {
           <span className="stat-label">Montant total</span>
           <span className="stat-value">{fmt(totalDeficit)} Ar</span>
         </div>
-        
+
         <div className="stat-card financial encaisse">
           <div className="stat-card-header">
             <div className="stat-card-icon blue">
@@ -196,7 +222,7 @@ export default function Deficits() {
 
       {loading ? (
         <SkeletonTable rows={5} cols={7} />
-      ) : liste.length === 0 ? (
+      ) : listeFiltree.length === 0 ? (
         <div className="empty-state">
           <div className="empty-state-icon">
             <LuTrendingDown className="icon" />
@@ -219,7 +245,7 @@ export default function Deficits() {
               </tr>
             </thead>
             <tbody>
-              {liste.map((d) => (
+              {listeFiltree.map((d) => (
                 <tr key={d.idDeficit}>
                   <td>{d.contribuable?.raisonSociale || '-'}</td>
                   <td>{d.anneeOrigine}</td>
@@ -238,7 +264,7 @@ export default function Deficits() {
           </table>
         </div>
       )}
-      <p className="table-footer">{liste.length} resultat(s)</p>
+      <p className="table-footer">{listeFiltree.length} resultat(s)</p>
     </div>
   );
 }

@@ -461,11 +461,60 @@ body {
   padding: 14px;
   border-radius: 8px;
   box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+  align-items: center;
 }
 
 .search-bar .form-input { flex: 1; min-width: 180px; }
 .search-bar .btn-primary,
 .search-bar .btn-secondary { margin-top: 0; }
+
+.search-input-wrapper {
+  position: relative;
+  flex: 1;
+  min-width: 220px;
+}
+
+.search-input-wrapper .search-icon {
+  position: absolute;
+  left: 14px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: #94a3b8;
+  pointer-events: none;
+}
+
+.search-input-wrapper .search-input {
+  padding-left: 42px;
+  padding-right: 38px;
+}
+
+.search-clear {
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: #e2e8f0;
+  color: #475569;
+  border: none;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.search-clear:hover {
+  background: #cbd5e1;
+  color: #1e293b;
+}
+
+@media (max-width: 768px) {
+  .search-bar { flex-direction: column; }
+  .search-bar > * { width: 100%; }
+}
 
 /* ===== Tableau ===== */
 .table-container {
@@ -919,4 +968,23 @@ button:focus-visible {
 
 .btn-link svg {
   vertical-align: middle;
+}
+
+/* ===== Dashboard : 5 cartes financieres ===== */
+@media (max-width: 1400px) {
+  .cards-grid.financial[style*="repeat(5"] {
+    grid-template-columns: repeat(4, 1fr) !important;
+  }
+}
+
+@media (max-width: 1200px) {
+  .cards-grid.financial[style*="repeat(5"] {
+    grid-template-columns: repeat(2, 1fr) !important;
+  }
+}
+
+@media (max-width: 768px) {
+  .cards-grid.financial[style*="repeat(5"] {
+    grid-template-columns: 1fr !important;
+  }
 }

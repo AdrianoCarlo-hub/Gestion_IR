@@ -1,21 +1,41 @@
 import { useEffect, useState } from 'react';
 import * as service from '../services/auditService';
+import SearchBar from '../components/SearchBar';
 import { LoadingBlock, SkeletonTable } from '../components/Spinner';
 import { LuScrollText, LuUser, LuClock, LuDatabase, LuTriangleAlert } from "react-icons/lu";
 
 export default function Audit() {
   const [liste, setListe] = useState([]);
+  const [listeFiltree, setListeFiltree] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [recherche, setRecherche] = useState('');
 
   useEffect(() => {
     service.lister()
-      .then(setListe)
+      .then((data) => {
+        setListe(data);
+        setListeFiltree(data);
+      })
       .catch((e) => setError(e.response?.data?.message || 'Erreur'))
       .finally(() => setLoading(false));
   }, []);
 
-  // Compiler les statistiques
+  useEffect(() => {
+    if (!recherche) {
+      setListeFiltree(liste);
+      return;
+    }
+    const r = recherche.toLowerCase();
+    setListeFiltree(
+      liste.filter((j) =>
+        (j.action || '').toLowerCase().includes(r) ||
+        (j.tableCible || '').toLowerCase().includes(r) ||
+        (j.agent ? (j.agent.nom + ' ' + j.agent.prenom).toLowerCase() : '').includes(r)
+      )
+    );
+  }, [recherche, liste]);
+
   const stats = {
     totalActions: liste.length,
     todayActions: liste.filter(j => j.dateHeure?.startsWith(new Date().toISOString().slice(0, 10))).length,
@@ -41,7 +61,12 @@ export default function Audit() {
         </div>
       )}
 
-      {/* Cartes de statistiques */}
+      <SearchBar
+        value={recherche}
+        onChange={setRecherche}
+        placeholder="Recherche (action, table, agent)"
+      />
+
       <div className="cards-grid" style={{ marginBottom: 24 }}>
         <div className="stat-card">
           <div className="stat-card-header">
@@ -52,7 +77,7 @@ export default function Audit() {
           <span className="stat-label">Total actions</span>
           <span className="stat-value">{stats.totalActions}</span>
         </div>
-        
+
         <div className="stat-card">
           <div className="stat-card-header">
             <div className="stat-card-icon blue">
@@ -62,7 +87,7 @@ export default function Audit() {
           <span className="stat-label">Actions aujourd'hui</span>
           <span className="stat-value">{stats.todayActions}</span>
         </div>
-        
+
         <div className="stat-card">
           <div className="stat-card-header">
             <div className="stat-card-icon orange">
@@ -72,7 +97,7 @@ export default function Audit() {
           <span className="stat-label">Agents actifs</span>
           <span className="stat-value">{stats.agents}</span>
         </div>
-        
+
         <div className="stat-card">
           <div className="stat-card-header">
             <div className="stat-card-icon purple">
@@ -86,7 +111,7 @@ export default function Audit() {
 
       {loading ? (
         <SkeletonTable rows={10} cols={6} />
-      ) : liste.length === 0 ? (
+      ) : listeFiltree.length === 0 ? (
         <div className="empty-state">
           <div className="empty-state-icon">
             <LuScrollText className="icon" />
@@ -108,7 +133,7 @@ export default function Audit() {
               </tr>
             </thead>
             <tbody>
-              {liste.map((j) => (
+              {listeFiltree.map((j) => (
                 <tr key={j.idLog}>
                   <td style={{ whiteSpace: 'nowrap' }}>
                     {j.dateHeure?.replace('T', ' ').substring(0, 19)}
@@ -135,7 +160,7 @@ export default function Audit() {
           </table>
         </div>
       )}
-      <p className="table-footer">{liste.length} entree(s)</p>
+      <p className="table-footer">{listeFiltree.length} entree(s)</p>
     </div>
   );
 }
