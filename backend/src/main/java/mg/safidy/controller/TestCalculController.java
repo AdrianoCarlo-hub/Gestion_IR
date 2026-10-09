@@ -47,14 +47,17 @@ public class TestCalculController {
         s.setMinPctCa(new BigDecimal("0.0100"));
         c.setSecteur(s);
 
+        // Nouvelle signature : (contribuable, caHt, totalCharges, totalChargesSansFacture,
+        //                       totalReintegrations, totalDeductions, deficitDisponible, acomptesVerses)
         ResultatCalculIR r = service.calculer(
                 c,
-                600_000_000L,
-                585_000_000L,
-                0L,
-                0L,
-                0L,
-                0L
+                600_000_000L,   // caHt
+                585_000_000L,   // totalCharges
+                0L,             // totalChargesSansFacture
+                0L,             // totalReintegrations
+                0L,             // totalDeductions
+                0L,             // deficitDisponible
+                0L              // acomptesVerses
         );
 
         Map<String, Object> m = new HashMap<>();
@@ -86,7 +89,17 @@ public class TestCalculController {
         s.setMinPctCa(new BigDecimal(pctStr));
         c.setSecteur(s);
 
-        ResultatCalculIR r = service.calculer(c, ca, 0L, 0L, 0L, 0L, 0L);
+        // Nouvelle signature a 8 parametres
+        ResultatCalculIR r = service.calculer(
+                c,
+                ca,   // caHt
+                0L,   // totalCharges
+                0L,   // totalChargesSansFacture
+                0L,   // totalReintegrations
+                0L,   // totalDeductions
+                0L,   // deficitDisponible
+                0L    // acomptesVerses
+        );
 
         Map<String, Object> m = new HashMap<>();
         m.put("cas", nom);

@@ -6,13 +6,11 @@ import mg.safidy.model.Acompte;
 import mg.safidy.model.Agent;
 import mg.safidy.model.Contribuable;
 import mg.safidy.model.DeclarationIR;
-import mg.safidy.model.Deficit;
 import mg.safidy.model.LigneCharge;
 import mg.safidy.repository.AcompteRepository;
 import mg.safidy.repository.AgentRepository;
 import mg.safidy.repository.ContribuableRepository;
 import mg.safidy.repository.DeclarationIRRepository;
-import mg.safidy.repository.DeficitRepository;
 import mg.safidy.repository.LigneChargeRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -29,31 +27,30 @@ public class DeclarationIRService {
     private static final List<String> CATEGORIES_VALIDES =
         Arrays.asList("SALAIRE", "LOYER", "ELECTRICITE", "TRANSPORT", "AUTRE");
 
-    // Seuil du regime reel obligatoire (Ar)
     private static final long SEUIL_REEL_OBLIGATOIRE = 400_000_000L;
 
     private final DeclarationIRRepository declarationRepository;
     private final ContribuableRepository contribuableRepository;
     private final AgentRepository agentRepository;
     private final LigneChargeRepository ligneChargeRepository;
-    private final DeficitRepository deficitRepository;
     private final AcompteRepository acompteRepository;
     private final IRCalculationService irCalculationService;
+    private final DeficitService deficitService;
 
     public DeclarationIRService(DeclarationIRRepository declarationRepository,
                                  ContribuableRepository contribuableRepository,
                                  AgentRepository agentRepository,
                                  LigneChargeRepository ligneChargeRepository,
-                                 DeficitRepository deficitRepository,
                                  AcompteRepository acompteRepository,
-                                 IRCalculationService irCalculationService) {
+                                 IRCalculationService irCalculationService,
+                                 DeficitService deficitService) {
         this.declarationRepository = declarationRepository;
         this.contribuableRepository = contribuableRepository;
         this.agentRepository = agentRepository;
         this.ligneChargeRepository = ligneChargeRepository;
-        this.deficitRepository = deficitRepository;
         this.acompteRepository = acompteRepository;
         this.irCalculationService = irCalculationService;
+        this.deficitService = deficitService;
     }
 
     public List<DeclarationIR> lister() {
@@ -77,16 +74,6 @@ public class DeclarationIRService {
         return ligneChargeRepository.findByDeclarationIdDeclaration(idDeclaration);
     }
 
-    /**
-     * Cree une declaration BROUILLON.
-     *
-     * Validations appliquees :
-     *  - Contribuable doit etre ACTIF
-     *  - Une seule declaration par contribuable et par annee
-     *  - Annee >= annee d'immatriculation
-     *  - Annee <= annee courante
-     *  - Duree de l'exercice <= 18 mois
-     */
     @Transactional
     public DeclarationIR creerBrouillon(Long idContribuable, Integer annee,
                                          LocalDate dateDebut, LocalDate dateFin,
@@ -104,7 +91,6 @@ public class DeclarationIRService {
 
         int anneeCourante = LocalDate.now().getYear();
 
-        // Annee >= annee d'immatriculation
         if (c.getDateImmatriculation() != null
                 && annee < c.getDateImmatriculation().getYear()) {
             throw new BusinessException(
@@ -112,7 +98,6 @@ public class DeclarationIRService {
                 + c.getDateImmatriculation().getYear() + ")");
         }
 
-        // Annee <= annee courante
         if (annee > anneeCourante) {
             throw new BusinessException(
                 "L annee ne peut pas etre dans le futur (max " + anneeCourante + ")");
@@ -125,7 +110,7 @@ public class DeclarationIRService {
         if (mois > 18) {
             throw new BusinessException("Exercice > 18 mois interdit");
         }
-        if (mois < 12) {
+        if (mois < 11) {
             throw new BusinessException("Exercice < 12 mois interdit (sauf premier exercice)");
         }
 
@@ -159,12 +144,6 @@ public class DeclarationIRService {
         return declarationRepository.save(d);
     }
 
-    /**
-     * Modifie le CA HT.
-     *
-     * Validation : si le contribuable est en regime REEL_OBLIGATOIRE,
-     * le CA doit etre >= 400 000 000 Ar.
-     */
     @Transactional
     public DeclarationIR modifierCaHt(Long idDeclaration, Long caHt) {
         DeclarationIR d = trouverParId(idDeclaration);
@@ -174,7 +153,6 @@ public class DeclarationIRService {
             throw new BusinessException("CA HT invalide");
         }
 
-        // Validation regime REEL_OBLIGATOIRE
         Contribuable c = d.getContribuable();
         if (c != null && "REEL_OBLIGATOIRE".equals(c.getRegime())) {
             if (caHt < SEUIL_REEL_OBLIGATOIRE) {
@@ -189,11 +167,6 @@ public class DeclarationIRService {
         return declarationRepository.save(d);
     }
 
-    /**
-     * Ajoute une ligne de charge a la declaration.
-     * Le champ "libelle" a ete supprime.
-     * Si categorie = AUTRE, categorieLibre est obligatoire.
-     */
     @Transactional
     public LigneCharge ajouterCharge(Long idDeclaration, String categorie, String categorieLibre,
                                       Long montantAr, String justificatifRef) {
@@ -234,31 +207,47 @@ public class DeclarationIRService {
         ligneChargeRepository.delete(lc);
     }
 
+    /**
+     * Calcul complet de l'IR avec :
+     *  - Reintegration automatique des charges sans facture
+     *  - Imputation automatique du deficit disponible
+     *  - Generation automatique de deficit si base < 0
+     */
     @Transactional
     public DeclarationIR calculerEtEnregistrer(Long idDeclaration,
-                                                Long totalReintegrations,
+                                                Long totalReintegrationsManuelles,
                                                 Long totalDeductions,
                                                 Long acomptesVerses) {
         DeclarationIR d = trouverParId(idDeclaration);
         verifierModifiable(d);
 
-        long totalCharges = ligneChargeRepository.findByDeclarationIdDeclaration(idDeclaration)
-                .stream().mapToLong(LigneCharge::getMontantAr).sum();
+        List<LigneCharge> charges = ligneChargeRepository.findByDeclarationIdDeclaration(idDeclaration);
 
-        long deficitDisponible = deficitRepository
-                .findByContribuableIdContribuableAndStatutOrderByAnneeOrigineAsc(
-                        d.getContribuable().getIdContribuable(), "ACTIF")
-                .stream().mapToLong(Deficit::getSolde).sum();
+        // Total des charges
+        long totalCharges = charges.stream().mapToLong(LigneCharge::getMontantAr).sum();
 
+        // Charges sans facture (a reintegrer automatiquement)
+        long totalChargesSansFacture = charges.stream()
+                .filter(c -> c.getJustificatifRef() == null || c.getJustificatifRef().isBlank())
+                .mapToLong(LigneCharge::getMontantAr)
+                .sum();
+
+        // Deficit disponible
+        long deficitDisponible = deficitService.calculerTotalDisponible(
+                d.getContribuable().getIdContribuable());
+
+        // Calcul
         ResultatCalculIR r = irCalculationService.calculer(
                 d.getContribuable(),
                 d.getCaHt(),
                 totalCharges,
-                totalReintegrations,
+                totalChargesSansFacture,
+                totalReintegrationsManuelles,
                 totalDeductions,
                 deficitDisponible,
                 acomptesVerses);
 
+        // Enregistrer les resultats dans la declaration
         d.setTotalCharges(r.getTotalCharges());
         d.setResultatComptable(r.getResultatComptable());
         d.setTotalReintegrations(r.getTotalReintegrations());
@@ -272,7 +261,25 @@ public class DeclarationIRService {
         d.setSoldeAPayer(r.getSoldeAPayer());
         d.setCreditImpot(r.getCreditImpot());
 
-        return declarationRepository.save(d);
+        DeclarationIR saved = declarationRepository.save(d);
+
+        // Imputation automatique du deficit si applicable
+        if (r.getDeficitImpute() != null && r.getDeficitImpute() > 0) {
+            deficitService.imputerAutomatique(
+                    d.getContribuable().getIdContribuable(),
+                    idDeclaration,
+                    r.getDeficitImpute());
+        }
+
+        // Generation automatique de deficit si base < 0
+        if (r.getDeficitGenere() != null && r.getDeficitGenere() > 0) {
+            deficitService.creerAutomatique(
+                    d.getContribuable().getIdContribuable(),
+                    d.getAnnee(),
+                    r.getDeficitGenere());
+        }
+
+        return saved;
     }
 
     @Transactional

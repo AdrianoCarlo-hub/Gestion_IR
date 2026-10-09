@@ -19,10 +19,17 @@ public class IRCalculationService {
         this.parametreRepository = parametreRepository;
     }
 
+    /**
+     * Calcul complet de l'IR.
+     *
+     * Le totalReintegrations doit deja inclure les charges sans facture
+     * (calculees par l'appelant).
+     */
     public ResultatCalculIR calculer(
             Contribuable contribuable,
             Long caHt,
             Long totalCharges,
+            Long totalChargesSansFacture,
             Long totalReintegrations,
             Long totalDeductions,
             Long deficitDisponible,
@@ -30,6 +37,7 @@ public class IRCalculationService {
 
         if (caHt == null) caHt = 0L;
         if (totalCharges == null) totalCharges = 0L;
+        if (totalChargesSansFacture == null) totalChargesSansFacture = 0L;
         if (totalReintegrations == null) totalReintegrations = 0L;
         if (totalDeductions == null) totalDeductions = 0L;
         if (deficitDisponible == null) deficitDisponible = 0L;
@@ -38,51 +46,69 @@ public class IRCalculationService {
         ResultatCalculIR r = new ResultatCalculIR();
         r.setCaHt(caHt);
         r.setTotalCharges(totalCharges);
-        r.setTotalReintegrations(totalReintegrations);
+        r.setTotalChargesSansFacture(totalChargesSansFacture);
         r.setTotalDeductions(totalDeductions);
         r.setAcomptesVerses(acomptesVerses);
 
-        // Etape 1 : resultat comptable = CA - charges
+        // Etape 1 : resultat comptable
         long resultatComptable = caHt - totalCharges;
         r.setResultatComptable(resultatComptable);
 
+        // Reintegrations effectives = reintegrations declarees + charges sans facture
+        long reintegrationsEffectives = totalReintegrations + totalChargesSansFacture;
+        r.setTotalReintegrations(reintegrationsEffectives);
+
         // Etape 2 : base avant deficit
-        long baseAvantDeficit = resultatComptable + totalReintegrations - totalDeductions;
+        long baseAvantDeficit = resultatComptable + reintegrationsEffectives - totalDeductions;
         r.setBaseAvantDeficit(baseAvantDeficit);
 
-        // Etape 3 : imputation du deficit (jamais plus que la base)
+        // Etape 3 : imputation du deficit
         long deficitImpute = 0L;
-        if (baseAvantDeficit > 0 && deficitDisponible > 0) {
-            deficitImpute = Math.min(baseAvantDeficit, deficitDisponible);
+        long deficitGenere = 0L;
+
+        if (baseAvantDeficit < 0) {
+            // Generation automatique de deficit
+            deficitGenere = Math.abs(baseAvantDeficit);
+            r.setDeficitImpute(0L);
+            r.setDeficitGenere(deficitGenere);
+            r.setBaseImposable(0L);
+            r.setIrBrut(0L);
+        } else {
+            // Imputation du deficit disponible
+            if (deficitDisponible > 0) {
+                deficitImpute = Math.min(baseAvantDeficit, deficitDisponible);
+            }
+            r.setDeficitImpute(deficitImpute);
+            r.setDeficitGenere(0L);
+
+            long baseApresDeficit = baseAvantDeficit - deficitImpute;
+            if (baseApresDeficit < 0) baseApresDeficit = 0;
+
+            // Etape 4 : base arrondie au millier inferieur
+            long baseArrondie = (baseApresDeficit / 1000L) * 1000L;
+            r.setBaseImposable(baseArrondie);
+
+            // Etape 5 : IR brut
+            BigDecimal tauxIr = getTaux("TAUX_IR", new BigDecimal("20"));
+            long irBrut = 0L;
+            if (baseArrondie > 0) {
+                irBrut = BigDecimal.valueOf(baseArrondie)
+                        .multiply(tauxIr)
+                        .divide(BigDecimal.valueOf(100), 0, RoundingMode.HALF_UP)
+                        .longValue();
+            }
+            r.setIrBrut(irBrut);
         }
-        r.setDeficitImpute(deficitImpute);
 
-        long baseApresDeficit = baseAvantDeficit - deficitImpute;
-        if (baseApresDeficit < 0) baseApresDeficit = 0;
-
-        // Etape 4 : IR brut = base arrondie au millier inferieur * 20%
-        long baseArrondie = (baseApresDeficit / 1000L) * 1000L;
-        r.setBaseImposable(baseArrondie);
-
-        BigDecimal tauxIr = getTaux("TAUX_IR", new BigDecimal("20"));
-        long irBrut = 0L;
-        if (baseArrondie > 0) {
-            irBrut = BigDecimal.valueOf(baseArrondie)
-                    .multiply(tauxIr)
-                    .divide(BigDecimal.valueOf(100), 0, RoundingMode.HALF_UP)
-                    .longValue();
-        }
-        r.setIrBrut(irBrut);
-
-        // Etape 5 : minimum de perception
+        // Etape 6 : minimum de perception
         long minimum = calculerMinimumPerception(contribuable, caHt);
         r.setMinimumPerception(minimum);
 
-        // Etape 6 : IR du = max(IR brut ; minimum)
-        long irDu = Math.max(irBrut, minimum);
+        // Etape 7 : IR du = max(IR brut ; minimum)
+        long irDu = Math.max(r.getIrBrut() == null ? 0L : r.getIrBrut(), minimum);
         r.setIrDu(irDu);
 
-        // Etape 7 : solde = IR du - acomptes verses
+        // Etape 8 : solde
         long solde = irDu - acomptesVerses;
         if (solde >= 0) {
             r.setSoldeAPayer(solde);

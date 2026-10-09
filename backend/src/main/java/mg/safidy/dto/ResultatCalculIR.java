@@ -4,10 +4,12 @@ public class ResultatCalculIR {
 
     private Long caHt;
     private Long totalCharges;
+    private Long totalChargesSansFacture;
     private Long resultatComptable;
     private Long totalReintegrations;
     private Long totalDeductions;
     private Long deficitImpute;
+    private Long deficitGenere;
     private Long baseAvantDeficit;
     private Long baseImposable;
     private Long irBrut;
@@ -34,6 +36,14 @@ public class ResultatCalculIR {
 
     public void setTotalCharges(Long totalCharges) {
         this.totalCharges = totalCharges;
+    }
+
+    public Long getTotalChargesSansFacture() {
+        return totalChargesSansFacture;
+    }
+
+    public void setTotalChargesSansFacture(Long totalChargesSansFacture) {
+        this.totalChargesSansFacture = totalChargesSansFacture;
     }
 
     public Long getResultatComptable() {
@@ -66,6 +76,14 @@ public class ResultatCalculIR {
 
     public void setDeficitImpute(Long deficitImpute) {
         this.deficitImpute = deficitImpute;
+    }
+
+    public Long getDeficitGenere() {
+        return deficitGenere;
+    }
+
+    public void setDeficitGenere(Long deficitGenere) {
+        this.deficitGenere = deficitGenere;
     }
 
     public Long getBaseAvantDeficit() {
