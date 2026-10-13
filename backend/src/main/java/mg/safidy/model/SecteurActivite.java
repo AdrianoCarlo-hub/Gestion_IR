@@ -32,6 +32,9 @@ public class SecteurActivite {
     @Column(name = "min_pct_ca", nullable = false, precision = 5, scale = 4)
     private BigDecimal minPctCa;
 
+    @Column(name = "taux_ir", precision = 5, scale = 2)
+    private BigDecimal tauxIr;
+
     @Column(name = "actif", nullable = false)
     private Boolean actif;
 
@@ -84,6 +87,14 @@ public class SecteurActivite {
 
     public void setMinPctCa(BigDecimal minPctCa) {
         this.minPctCa = minPctCa;
+    }
+
+    public BigDecimal getTauxIr() {
+        return tauxIr;
+    }
+
+    public void setTauxIr(BigDecimal tauxIr) {
+        this.tauxIr = tauxIr;
     }
 
     public Boolean getActif() {

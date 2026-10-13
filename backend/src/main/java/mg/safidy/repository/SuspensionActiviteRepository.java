@@ -11,4 +11,9 @@ public interface SuspensionActiviteRepository extends JpaRepository<SuspensionAc
 
     Optional<SuspensionActivite> findByContribuableIdContribuableAndStatut(
         Long idContribuable, String statut);
+
+    List<SuspensionActivite> findByContribuableIdContribuableAndTypeEvenementOrderByDateArretDesc(
+        Long idContribuable, String typeEvenement);
+
+    List<SuspensionActivite> findByStatut(String statut);
 }

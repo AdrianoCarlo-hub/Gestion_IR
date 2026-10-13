@@ -4,6 +4,7 @@ import SearchBar from '../components/SearchBar';
 import { lister as listerContribuables } from '../services/contribuableService';
 import * as service from '../services/declarationService';
 import DeclarationForm from './DeclarationForm';
+import ContribuableRecherche from '../components/ContribuableRecherche';
 import { LuPlus } from 'react-icons/lu';
 
 const anneeCourante = new Date().getFullYear();
@@ -91,6 +92,11 @@ export default function Declarations() {
     e.preventDefault();
     setError('');
     setSuccess('');
+
+    if (!nouveauContribuable) {
+      setError('Contribuable obligatoire');
+      return;
+    }
 
     if (erreurAnnee) {
       setError(erreurAnnee);
@@ -205,17 +211,11 @@ export default function Declarations() {
             <div className="form-row">
               <div className="form-group" style={{ flex: 2 }}>
                 <label className="form-label">Contribuable *</label>
-                <select
-                  className="form-input"
+                <ContribuableRecherche
+                  contribuables={contribuables}
                   value={nouveauContribuable}
-                  onChange={(e) => setNouveauContribuable(e.target.value)}
-                >
-                  {contribuables.map((c) => (
-                    <option key={c.idContribuable} value={c.idContribuable}>
-                      {c.nif} - {c.raisonSociale}
-                    </option>
-                  ))}
-                </select>
+                  onChange={(id) => setNouveauContribuable(id)}
+                />
                 {contribuableSelectionne && (
                   <span style={{ fontSize: 12, color: '#64748b', marginTop: 4 }}>
                     Regime : {contribuableSelectionne.regime}

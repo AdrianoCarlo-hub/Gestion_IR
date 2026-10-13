@@ -46,6 +46,12 @@ public class Acompte {
     @Column(name = "statut", nullable = false, length = 20)
     private String statut;
 
+    @Column(name = "type_acompte", nullable = false, length = 20)
+    private String typeAcompte;
+
+    @Column(name = "reference_douane", length = 40)
+    private String referenceDouane;
+
     @Column(name = "date_creation", nullable = false)
     private LocalDateTime dateCreation;
 
@@ -122,6 +128,22 @@ public class Acompte {
 
     public void setStatut(String statut) {
         this.statut = statut;
+    }
+
+    public String getTypeAcompte() {
+        return typeAcompte;
+    }
+
+    public void setTypeAcompte(String typeAcompte) {
+        this.typeAcompte = typeAcompte;
+    }
+
+    public String getReferenceDouane() {
+        return referenceDouane;
+    }
+
+    public void setReferenceDouane(String referenceDouane) {
+        this.referenceDouane = referenceDouane;
     }
 
     public LocalDateTime getDateCreation() {

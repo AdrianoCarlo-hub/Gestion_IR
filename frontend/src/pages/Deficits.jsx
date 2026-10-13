@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { lister as listerContribuables } from '../services/contribuableService';
 import * as service from '../services/deficitService';
 import SearchBar from '../components/SearchBar';
+import ContribuableRecherche from '../components/ContribuableRecherche';
 import { SkeletonTable } from '../components/Spinner';
 import { useToast } from '../context/ToastContext';
 import { LuPlus, LuTrendingDown, LuUser, LuCalendar, LuDollarSign, LuTriangleAlert, LuX, LuSave } from "react-icons/lu";
@@ -170,19 +171,11 @@ export default function Deficits() {
           <div className="form-row">
             <div className="form-group" style={{ flex: 2 }}>
               <label className="form-label required">Contribuable *</label>
-              <select 
-                className="form-select" 
+              <ContribuableRecherche
+                contribuables={contribuables}
                 value={form.idContribuable}
-                onChange={(e) => setF('idContribuable', e.target.value)} 
-                required
-              >
-                <option value="">-- Choisir un contribuable --</option>
-                {contribuables.map((c) => (
-                  <option key={c.idContribuable} value={c.idContribuable}>
-                    {c.nif} - {c.raisonSociale}
-                  </option>
-                ))}
-              </select>
+                onChange={(id) => setF('idContribuable', id)}
+              />
             </div>
             <div className="form-group">
               <label className="form-label required">Annee d'origine *</label>

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import SearchBar from '../components/SearchBar';
+import ContribuableRecherche from '../components/ContribuableRecherche';
 import { lister as listerContribuables } from '../services/contribuableService';
 import { lister as listerDeclarations } from '../services/declarationService';
 import * as service from '../services/paiementService';
@@ -210,22 +211,14 @@ export default function Paiements() {
           <div className="form-row">
             <div className="form-group" style={{ flex: 2 }}>
               <label className="form-label required">Contribuable *</label>
-              <select 
-                className="form-select" 
+              <ContribuableRecherche
+                contribuables={contribuables}
                 value={form.idContribuable}
-                onChange={(e) => {
-                  setF('idContribuable', e.target.value);
+                onChange={(id) => {
+                  setF('idContribuable', id);
                   setF('idDeclaration', '');
                 }}
-                required
-              >
-                <option value="">-- Choisir un contribuable --</option>
-                {contribuables.map((c) => (
-                  <option key={c.idContribuable} value={c.idContribuable}>
-                    {c.nif} - {c.raisonSociale}
-                  </option>
-                ))}
-              </select>
+              />
             </div>
             <div className="form-group">
               <label className="form-label">Declaration (optionnel)</label>

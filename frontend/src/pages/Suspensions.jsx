@@ -1,272 +1,320 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { lister as listerContribuables } from '../services/contribuableService';
 import * as service from '../services/suspensionService';
+import ContribuableRecherche from '../components/ContribuableRecherche';
 import ConfirmDialog from '../components/ConfirmDialog';
+import StatutBanner from '../components/suspensions/StatutBanner';
+import DeclarationForm from '../components/suspensions/DeclarationForm';
+import HistoriqueTimeline from '../components/suspensions/HistoriqueTimeline';
+import { LoadingBlock } from '../components/Spinner';
 import { useToast } from '../context/ToastContext';
-import { LoadingBlock, SkeletonTable } from '../components/Spinner';
-import { LuCirclePause, LuCirclePlay, LuUser, LuCalendar, LuFileText, LuTriangleAlert, LuTrash2, LuPlus, LuX } from "react-icons/lu";
+import {
+  LuBadgeCheck,
+  LuActivity,
+  LuCirclePause,
+  LuCirclePlay,
+} from 'react-icons/lu';
 
-const today = new Date().toISOString().slice(0, 10);
+const today = () => {
+  const date = new Date();
+  const local = new Date(date.getTime() - date.getTimezoneOffset() * 60000);
+  return local.toISOString().slice(0, 10);
+};
+const yesterday = () => {
+  const date = new Date();
+  date.setDate(date.getDate() - 1);
+  const local = new Date(date.getTime() - date.getTimezoneOffset() * 60000);
+  return local.toISOString().slice(0, 10);
+};
+const lendemain = (date) => {
+  if (!date) return undefined;
+  const lendemainDate = new Date(date + 'T00:00:00');
+  lendemainDate.setDate(lendemainDate.getDate() + 1);
+  const local = new Date(lendemainDate.getTime() - lendemainDate.getTimezoneOffset() * 60000);
+  return local.toISOString().slice(0, 10);
+};
+
+const MOTIFS_ARRET = [
+  { value: 'MANQUE_ACTIVITE', label: "Manque d'activite" },
+  { value: 'TRAVAUX', label: 'Travaux' },
+  { value: 'SAISON', label: 'Activite saisonniere' },
+  { value: 'DIFFICULTE_FINANCIERE', label: 'Difficulte financiere' },
+  { value: 'REORGANISATION', label: 'Reorganisation' },
+  { value: 'AUTRE', label: 'Autre' },
+];
 
 export default function Suspensions() {
   const { agent } = useAuth();
   const toast = useToast();
   const [confirm, setConfirm] = useState(null);
+  const [statusDialog, setStatusDialog] = useState(null);
   const [contribuables, setContribuables] = useState([]);
   const [selected, setSelected] = useState('');
-  const [historique, setHistorique] = useState([]);
-  const [error, setError] = useState('');
-  const [formArret, setFormArret] = useState({ dateArret: today, motif: 'MANQUE_ACTIVITE', refDeclaration: '' });
-  const [formReprise, setFormReprise] = useState({ dateReprise: today });
+  const [situation, setSituation] = useState(null);
+  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     listerContribuables().then(setContribuables).catch(() => {});
   }, []);
 
-  const charger = async (id) => {
-    if (!id) return;
+  const charger = useCallback(async (id) => {
+    if (!id) { setSituation(null); return; }
+    setLoading(true);
     try {
-      setHistorique(await service.parContribuable(id));
+      setSituation(await service.situation(id));
     } catch (e) {
-      setError(e.response?.data?.message || 'Erreur');
+      toast.error(e.response?.data?.message || 'Erreur de chargement');
+    } finally {
+      setLoading(false);
     }
-  };
+  }, [toast]);
 
   useEffect(() => {
     if (selected) charger(selected);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selected]);
 
-  const handleArret = async (e) => {
+  const idAgent = agent ? agent.idAgent : 3;
+  const enCours = situation ? situation.idSuspensionEnCours : null;
+  const statutActuel = situation?.statutActuel;
+  const evenementEnCours = situation?.historique?.find((evenement) => evenement.statut === 'EN_COURS');
+
+  const demanderChangementStatut = () => {
+    if (statutActuel !== 'ACTIF' && statutActuel !== 'SUSPENDU') return;
+
+    const nouveauStatut = statutActuel === 'ACTIF' ? 'SUSPENDU' : 'ACTIF';
+    setStatusDialog({
+      statut: nouveauStatut,
+      date: today(),
+      dateArret: nouveauStatut === 'ACTIF' && !evenementEnCours ? yesterday() : '',
+      motif: MOTIFS_ARRET[0].value,
+    });
+  };
+
+  const soumettreChangementStatut = async (e) => {
     e.preventDefault();
-    setError('');
+    if (!statusDialog) return;
     try {
-      await service.declarerArret({
-        idContribuable: Number(selected),
-        dateArret: formArret.dateArret,
-        motif: formArret.motif,
-        refDeclaration: formArret.refDeclaration || null,
-        idAgent: agent ? agent.idAgent : 3,
+      await service.changerStatut(Number(selected), statusDialog.statut, idAgent, {
+        dateArret: statusDialog.statut === 'SUSPENDU'
+          ? statusDialog.date
+          : !evenementEnCours ? statusDialog.dateArret : undefined,
+        motif: statusDialog.statut === 'SUSPENDU' || !evenementEnCours
+          ? statusDialog.motif : undefined,
+        dateReprise: statusDialog.statut === 'ACTIF' ? statusDialog.date : undefined,
       });
-      toast.success('Arret enregistre');
-      charger(selected);
-    } catch (err) {
-      toast.error(err.response?.data?.message || 'Erreur');
+      setStatusDialog(null);
+      await charger(selected);
+      toast.success(statusDialog.statut === 'ACTIF' ? 'Reprise enregistree' : 'Suspension enregistree');
+    } catch (e2) {
+      toast.error(e2.response?.data?.message || 'Erreur de changement du statut');
     }
   };
 
-  const handleReprise = async (idSuspension) => {
-    setError('');
+  const soumettre = async (type, payload) => {
     try {
-      await service.declarerReprise(idSuspension, {
-        dateReprise: formReprise.dateReprise,
-        idAgent: agent ? agent.idAgent : 3,
-      });
-      toast.success('Reprise enregistree');
+      if (type === 'VEILLEUSE') {
+        await service.declarerVeilleuse({ idContribuable: Number(selected), idAgent, ...payload });
+        toast.success('Mise en veilleuse enregistree');
+      } else if (type === 'CESSATION') {
+        await service.declarerCessation({ idContribuable: Number(selected), idAgent, ...payload });
+        toast.success('Cessation enregistree');
+      } else if (type === 'REPRISE') {
+        await service.declarerReprise(enCours, { idAgent, ...payload });
+        toast.success('Reprise enregistree');
+      }
       charger(selected);
-    } catch (err) {
-      toast.error(err.response?.data?.message || 'Erreur');
+    } catch (e) {
+      toast.error(e.response?.data?.message || 'Erreur');
     }
   };
 
-  const handleAnnuler = (id) => {
+  const attestation = async () => {
+    try {
+      const res = await service.attestationRadiation(enCours);
+      toast.success('Attestation de radiation : ' + (res.attestationRadiationNumero || ''));
+      charger(selected);
+    } catch (e) {
+      toast.error(e.response?.data?.message || 'Erreur');
+    }
+  };
+
+  const annuler = (id) => {
     setConfirm({
-      titre: 'Annuler la suspension',
-      message: 'Annuler cette suspension ?',
+      titre: 'Annuler l evenement',
+      message: 'Annuler cet evenement d arret / reprise ?',
       texteConfirmer: 'Annuler',
       danger: true,
       onConfirmer: async () => {
         try {
           await service.annuler(id);
-          toast.success('Suspension annulee');
+          toast.success('Evenement annule');
           charger(selected);
-        } catch (err) {
-          toast.error(err.response?.data?.message || 'Erreur');
+        } catch (e) {
+          toast.error(e.response?.data?.message || 'Erreur');
         }
       },
     });
   };
-
-  const enCours = historique.find((h) => h.statut === 'EN_COURS');
-
-  // Filtrer les contribuables avec suspensions
-  const contribuablesAvecSuspensions = contribuables.filter(c => 
-    historique.some(h => h.contribuable?.idContribuable === c.idContribuable)
-  );
 
   return (
     <div className="page">
       <header className="page-header">
         <div>
           <h1>Arret / reprise d activite</h1>
-          <p className="page-sub">Suspension de l impot pendant l arret</p>
+          <p className="page-sub">Veilleuse, cessation definitive et reprise</p>
         </div>
       </header>
 
-      {error && (
-        <div className="alert alert-error" style={{ marginBottom: 16 }}>
-          <span className="alert-icon">
-            <LuTriangleAlert className="icon" />
-          </span>
-          <span>{error}</span>
-        </div>
-      )}
-
       <div className="form-panel" style={{ marginBottom: 16 }}>
         <label className="form-label">Contribuable</label>
-        <select 
-          className="form-select" 
-          value={selected} 
-          onChange={(e) => setSelected(e.target.value)}
-        >
-          <option value="">-- Choisir un contribuable --</option>
-          {contribuables.map((c) => (
-            <option key={c.idContribuable} value={c.idContribuable}>
-              {c.nif} - {c.raisonSociale} ({c.statut})
-            </option>
-          ))}
-        </select>
+        <ContribuableRecherche contribuables={contribuables}
+          value={selected} onChange={(id) => setSelected(id)} />
       </div>
 
-      {selected && !enCours && (
-        <form className="form-panel" onSubmit={handleArret} style={{ marginBottom: 16 }}>
-          <h3 className="section-title">
-            <LuCirclePause className="section-icon" />
-            Declarer un arret
-          </h3>
-          <div className="form-row">
-            <div className="form-group">
-              <label className="form-label required">Date d arret *</label>
-              <input 
-                type="date" 
-                className="form-input" 
-                value={formArret.dateArret}
-                onChange={(e) => setFormArret({ ...formArret, dateArret: e.target.value })} 
-                required 
-              />
+      {!selected ? (
+        <div className="empty-state">
+          <div className="empty-state-icon"><LuActivity className="icon" /></div>
+          <h3>Selectionnez un contribuable</h3>
+          <p>Choisissez un contribuable pour gerer son activite</p>
+        </div>
+      ) : loading ? (
+        <LoadingBlock message="Chargement..." />
+      ) : (
+        <>
+          <div className="section-head" style={{ marginBottom: 16 }}>
+            <div style={{ flex: '1 1 320px' }}>
+              <StatutBanner statut={statutActuel} moisActifs={situation?.moisActifs} />
             </div>
-            <div className="form-group">
-              <label className="form-label required">Motif *</label>
-              <select 
-                className="form-select" 
-                value={formArret.motif}
-                onChange={(e) => setFormArret({ ...formArret, motif: e.target.value })}
+            {(statutActuel === 'ACTIF' || statutActuel === 'SUSPENDU') && (
+              <button
+                className={statutActuel === 'ACTIF' ? 'btn btn-secondary' : 'btn btn-primary'}
+                onClick={demanderChangementStatut}
+                type="button"
               >
-                <option value="MANQUE_ACTIVITE">Manque d activite</option>
-                <option value="TRAVAUX">Travaux</option>
-                <option value="SAISON">Saison</option>
-                <option value="DIFFICULTE_FINANCIERE">Difficulte financiere</option>
-                <option value="AUTRE">Autre</option>
-              </select>
-            </div>
-            <div className="form-group">
-              <label className="form-label">N declaration ecrite</label>
-              <input 
-                className="form-input" 
-                value={formArret.refDeclaration}
-                onChange={(e) => setFormArret({ ...formArret, refDeclaration: e.target.value })}
-              />
-            </div>
+                {statutActuel === 'ACTIF'
+                  ? <><LuCirclePause className="icon" /> Suspendre</>
+                  : <><LuCirclePlay className="icon" /> Reactiver</>}
+              </button>
+            )}
           </div>
-          <div className="form-actions">
-            <button type="submit" className="btn btn-primary">
-              <LuCirclePause className="icon" />
-              Enregistrer l arret
-            </button>
-          </div>
-        </form>
-      )}
 
-      {enCours && (
-        <div className="form-panel" style={{ marginBottom: 16 }}>
-          <h3 className="section-title">
-            <LuCirclePlay className="section-icon" />
-            Declarer la reprise
-          </h3>
-          <div className="alert alert-info" style={{ marginBottom: 16 }}>
-            <span className="alert-icon">
-              <LuCirclePause className="icon" />
-            </span>
-            <span>Un arret est en cours pour ce contribuable (Date: {enCours.dateArret}, Motif: {enCours.motif})</span>
-          </div>
-          <div className="form-row">
-            <div className="form-group">
-              <label className="form-label required">Date de reprise *</label>
-              <input 
-                type="date" 
-                className="form-input" 
-                value={formReprise.dateReprise}
-                onChange={(e) => setFormReprise({ dateReprise: e.target.value })}
-              />
+          {(statutActuel !== 'SUSPENDU' || enCours) && (
+            <DeclarationForm onSoumettre={soumettre} enCours={enCours} enCoursId={enCours} />
+          )}
+
+          <div className="section-head">
+            <h3 className="section-title">Historique</h3>
+            <div className="row-actions">
+              {enCours && situation?.typeEvenementEnCours === 'VEILLEUSE' && (
+                <button className="btn btn-secondary" onClick={() => annuler(enCours)}>
+                  Annuler l arret en cours
+                </button>
+              )}
+              {enCours && situation?.typeEvenementEnCours === 'CESSATION' && (
+                <button className="btn btn-validate" onClick={attestation}>
+                  <LuBadgeCheck className="icon" /> Attestation de radiation
+                </button>
+              )}
             </div>
           </div>
-          <div className="form-actions">
-            <button className="btn btn-validate" onClick={() => handleReprise(enCours.idSuspension)}>
-              <LuCirclePlay className="icon" />
-              Enregistrer la reprise
-            </button>
-          </div>
-        </div>
-      )}
 
-      {selected && historique.length > 0 && (
-        <div className="table-container">
-          <table className="data-table">
-            <thead>
-              <tr>
-                <th>Date arret</th>
-                <th>Date reprise</th>
-                <th>Motif</th>
-                <th>Statut</th>
-                <th>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {historique.map((h) => (
-                <tr key={h.idSuspension}>
-                  <td>{h.dateArret}</td>
-                  <td>{h.dateReprise || '-'}</td>
-                  <td>
-                    <span className="badge badge-info" style={{ fontSize: 11 }}>
-                      {h.motif}
-                    </span>
-                  </td>
-                  <td>
-                    <span className={'badge badge-' + (h.statut === 'EN_COURS' ? 'suspendu' : 'actif')}>
-                      {h.statut}
-                    </span>
-                  </td>
-                  <td>
-                    {h.statut === 'EN_COURS' && (
-                      <button 
-                        className="btn-icon delete"
-                        onClick={() => handleAnnuler(h.idSuspension)}
-                        title="Annuler"
-                      >
-                        <LuTrash2 className="icon" />
-                      </button>
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+          <HistoriqueTimeline historique={situation?.historique || []} />
+        </>
       )}
 
       <ConfirmDialog
         ouvert={!!confirm}
-        titre={confirm ? confirm.titre : 'Confirmation'}
+        titre={confirm ? confirm.titre : ''}
         message={confirm ? confirm.message : ''}
         texteConfirmer={confirm ? confirm.texteConfirmer : 'Confirmer'}
         danger={confirm ? !!confirm.danger : false}
-        onConfirmer={() => {
-          if (confirm && confirm.onConfirmer) confirm.onConfirmer();
-          setConfirm(null);
-        }}
+        onConfirmer={() => { if (confirm) confirm.onConfirmer(); setConfirm(null); }}
         onAnnuler={() => setConfirm(null)}
       />
+
+      {statusDialog && (
+        <div className="modal-overlay" onClick={() => setStatusDialog(null)}>
+          <form
+            className="modal-box"
+            onSubmit={soumettreChangementStatut}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="modal-header">
+              <h3>{statusDialog.statut === 'SUSPENDU' ? "Suspendre l'activite" : "Reprise d'activite"}</h3>
+            </div>
+            <div className="modal-body">
+              <div className="form-group">
+                <label className="form-label required">
+                  {statusDialog.statut === 'SUSPENDU' ? "Date d'arret" : 'Date de reprise'}
+                </label>
+                <input
+                  className="form-input"
+                  type="date"
+                  value={statusDialog.date}
+                  min={statusDialog.statut === 'ACTIF'
+                    ? lendemain(evenementEnCours?.dateArret || statusDialog.dateArret) : undefined}
+                  max={today()}
+                  required
+                  onChange={(e) => setStatusDialog((current) => ({ ...current, date: e.target.value }))}
+                />
+              </div>
+              {statusDialog.statut === 'SUSPENDU' && (
+                <div className="form-group" style={{ marginTop: 14 }}>
+                  <label className="form-label required">Motif de suspension</label>
+                  <select
+                    className="form-input"
+                    value={statusDialog.motif}
+                    required
+                    onChange={(e) => setStatusDialog((current) => ({ ...current, motif: e.target.value }))}
+                  >
+                    {MOTIFS_ARRET.map((motif) => (
+                      <option key={motif.value} value={motif.value}>{motif.label}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+              {statusDialog.statut === 'ACTIF' && !evenementEnCours && (
+                <>
+                  <div className="form-group" style={{ marginTop: 14 }}>
+                    <label className="form-label required">Date de suspension historique</label>
+                    <input
+                      className="form-input"
+                      type="date"
+                      value={statusDialog.dateArret}
+                      max={statusDialog.date}
+                      required
+                      onChange={(e) => setStatusDialog((current) => ({ ...current, dateArret: e.target.value }))}
+                    />
+                  </div>
+                  <div className="form-group" style={{ marginTop: 14 }}>
+                    <label className="form-label required">Motif de suspension</label>
+                    <select
+                      className="form-input"
+                      value={statusDialog.motif}
+                      required
+                      onChange={(e) => setStatusDialog((current) => ({ ...current, motif: e.target.value }))}
+                    >
+                      {MOTIFS_ARRET.map((motif) => (
+                        <option key={motif.value} value={motif.value}>{motif.label}</option>
+                      ))}
+                    </select>
+                  </div>
+                </>
+              )}
+            </div>
+            <div className="modal-footer">
+              <button type="button" className="btn btn-secondary" onClick={() => setStatusDialog(null)}>
+                Annuler
+              </button>
+              <button type="submit" className="btn btn-primary">
+                {statusDialog.statut === 'SUSPENDU' ? 'Confirmer la suspension' : 'Confirmer la reprise'}
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
     </div>
   );
 }

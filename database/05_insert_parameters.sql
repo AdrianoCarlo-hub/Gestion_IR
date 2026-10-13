@@ -18,18 +18,20 @@ INSERT INTO CENTRE_FISCAL (code, nom, region, adresse, telephone) VALUES
 -- ---------------------------------------------
 -- Secteurs d'activite
 -- ---------------------------------------------
-INSERT INTO SECTEUR_ACTIVITE (code, libelle, categorie, min_fixe_ar, min_pct_ca) VALUES
-('AGRICOLE',   'Agricole',              'PRIORITAIRE', 500000,  0.0100),
-('ARTISANAL',  'Artisanal',             'PRIORITAIRE', 500000,  0.0100),
-('INDUSTRIEL', 'Industriel',            'PRIORITAIRE', 500000,  0.0100),
-('MINIER',     'Minier',                'PRIORITAIRE', 500000,  0.0100),
-('HOTELIER',   'Hotelier',              'PRIORITAIRE', 500000,  0.0100),
-('TOURISTIQUE','Touristique',           'PRIORITAIRE', 500000,  0.0100),
-('COMMERCE',   'Commerce',              'GENERAL',     1000000, 0.0100),
-('SERVICES',   'Services',              'GENERAL',     1000000, 0.0100),
-('CARBURANT',  'Vente de carburants',   'CARBURANT',   0,       0.0020),
-('SANTE',      'Sante',                 'SANTE_EDUC',  200000,  0.0020),
-('EDUCATION',  'Education',             'SANTE_EDUC',  200000,  0.0020);
+-- taux_ir : NULL = taux de droit commun (parametre TAUX_IR, 20 %).
+-- Sante / Education : option a 10 % (regime REEL_OPTION uniquement).
+INSERT INTO SECTEUR_ACTIVITE (code, libelle, categorie, min_fixe_ar, min_pct_ca, taux_ir) VALUES
+('AGRICOLE',   'Agricole',              'PRIORITAIRE', 500000,  0.0100, NULL),
+('ARTISANAL',  'Artisanal',             'PRIORITAIRE', 500000,  0.0100, NULL),
+('INDUSTRIEL', 'Industriel',            'PRIORITAIRE', 500000,  0.0100, NULL),
+('MINIER',     'Minier',                'PRIORITAIRE', 500000,  0.0100, NULL),
+('HOTELIER',   'Hotelier',              'PRIORITAIRE', 500000,  0.0100, NULL),
+('TOURISTIQUE','Touristique',           'PRIORITAIRE', 500000,  0.0100, NULL),
+('COMMERCE',   'Commerce',              'GENERAL',     1000000, 0.0100, NULL),
+('SERVICES',   'Services',              'GENERAL',     1000000, 0.0100, NULL),
+('CARBURANT',  'Vente de carburants',   'CARBURANT',   0,       0.0020, NULL),
+('SANTE',      'Sante',                 'SANTE_EDUC',  200000,  0.0020, 10.00),
+('EDUCATION',  'Education',             'SANTE_EDUC',  200000,  0.0020, 10.00);
 
 -- ---------------------------------------------
 -- Parametres fiscaux initiaux

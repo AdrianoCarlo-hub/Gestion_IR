@@ -2,12 +2,10 @@ package mg.safidy.service;
 
 import mg.safidy.dto.ResultatCalculIR;
 import mg.safidy.exception.BusinessException;
-import mg.safidy.model.Acompte;
 import mg.safidy.model.Agent;
 import mg.safidy.model.Contribuable;
 import mg.safidy.model.DeclarationIR;
 import mg.safidy.model.LigneCharge;
-import mg.safidy.repository.AcompteRepository;
 import mg.safidy.repository.AgentRepository;
 import mg.safidy.repository.ContribuableRepository;
 import mg.safidy.repository.DeclarationIRRepository;
@@ -33,24 +31,27 @@ public class DeclarationIRService {
     private final ContribuableRepository contribuableRepository;
     private final AgentRepository agentRepository;
     private final LigneChargeRepository ligneChargeRepository;
-    private final AcompteRepository acompteRepository;
+    private final AcompteService acompteService;
     private final IRCalculationService irCalculationService;
     private final DeficitService deficitService;
+    private final PenaliteService penaliteService;
 
     public DeclarationIRService(DeclarationIRRepository declarationRepository,
                                  ContribuableRepository contribuableRepository,
                                  AgentRepository agentRepository,
                                  LigneChargeRepository ligneChargeRepository,
-                                 AcompteRepository acompteRepository,
+                                 AcompteService acompteService,
                                  IRCalculationService irCalculationService,
-                                 DeficitService deficitService) {
+                                 DeficitService deficitService,
+                                 PenaliteService penaliteService) {
         this.declarationRepository = declarationRepository;
         this.contribuableRepository = contribuableRepository;
         this.agentRepository = agentRepository;
         this.ligneChargeRepository = ligneChargeRepository;
-        this.acompteRepository = acompteRepository;
+        this.acompteService = acompteService;
         this.irCalculationService = irCalculationService;
         this.deficitService = deficitService;
+        this.penaliteService = penaliteService;
     }
 
     public List<DeclarationIR> lister() {
@@ -129,6 +130,7 @@ public class DeclarationIRService {
         d.setTotalDeductions(0L);
         d.setDeficitImpute(0L);
         d.setBaseImposable(0L);
+        d.setTauxIr(new BigDecimal("20"));
         d.setIrBrut(0L);
         d.setMinimumPerception(0L);
         d.setIrDu(0L);
@@ -164,6 +166,19 @@ public class DeclarationIRService {
         }
 
         d.setCaHt(caHt);
+        return declarationRepository.save(d);
+    }
+
+    @Transactional
+    public DeclarationIR modifierMoisActifs(Long idDeclaration, Integer moisActifs) {
+        DeclarationIR d = trouverParId(idDeclaration);
+        verifierModifiable(d);
+
+        if (moisActifs == null || moisActifs < 0 || moisActifs > 12) {
+            throw new BusinessException("Mois actifs : valeur de 0 a 12 requise");
+        }
+
+        d.setMoisActifs(moisActifs);
         return declarationRepository.save(d);
     }
 
@@ -245,7 +260,8 @@ public class DeclarationIRService {
                 totalReintegrationsManuelles,
                 totalDeductions,
                 deficitDisponible,
-                acomptesVerses);
+                acomptesVerses,
+                d.getMoisActifs());
 
         // Enregistrer les resultats dans la declaration
         d.setTotalCharges(r.getTotalCharges());
@@ -254,6 +270,7 @@ public class DeclarationIRService {
         d.setTotalDeductions(r.getTotalDeductions());
         d.setDeficitImpute(r.getDeficitImpute());
         d.setBaseImposable(r.getBaseImposable());
+        d.setTauxIr(r.getTauxApplique());
         d.setIrBrut(r.getIrBrut());
         d.setMinimumPerception(r.getMinimumPerception());
         d.setIrDu(r.getIrDu());
@@ -294,37 +311,26 @@ public class DeclarationIRService {
         }
         DeclarationIR saved = declarationRepository.save(d);
 
+        // Penalite automatique si depot apres la date limite (regle CPF).
+        if (saved.getDateLimite() != null
+                && saved.getDateDepot() != null
+                && saved.getDateDepot().isAfter(saved.getDateLimite())) {
+            try {
+                penaliteService.appliquerAmendeDepotTardif(
+                        saved.getIdDeclaration(), saved.getDateDepot());
+            } catch (BusinessException ignore) {
+                // pas de penalite applicable
+            }
+        }
+
         if (saved.getIrDu() != null && saved.getIrDu() > 0) {
-            genererAcomptesAnneeSuivante(saved);
+            // Regle : les 2 acomptes provisionnels de l'annee suivante (50 % chacun)
+            acompteService.creerAcomptesProvisionnels(
+                    saved.getContribuable().getIdContribuable(),
+                    saved.getAnnee() + 1,
+                    saved.getIrDu());
         }
         return saved;
-    }
-
-    private void genererAcomptesAnneeSuivante(DeclarationIR d) {
-        int anneeN1 = d.getAnnee() + 1;
-        BigDecimal taux = irCalculationService.getTaux("TAUX_ACOMPTE", new BigDecimal("50"));
-        long moitie = BigDecimal.valueOf(d.getIrDu())
-                .multiply(taux)
-                .divide(BigDecimal.valueOf(100), 0, java.math.RoundingMode.HALF_UP)
-                .longValue();
-
-        for (int numero = 1; numero <= 2; numero++) {
-            if (acompteRepository.findByContribuableIdContribuableAndAnneeAndNumero(
-                    d.getContribuable().getIdContribuable(), anneeN1, numero).isPresent()) {
-                continue;
-            }
-            Acompte a = new Acompte();
-            a.setContribuable(d.getContribuable());
-            a.setAnnee(anneeN1);
-            a.setNumero(numero);
-            a.setTauxPct(50);
-            a.setBaseIrN1(d.getIrDu());
-            a.setMontantAr(moitie);
-            a.setDateEcheance(LocalDate.of(anneeN1, numero == 1 ? 5 : 11, 15));
-            a.setStatut("A_PAYER");
-            a.setDateCreation(LocalDateTime.now());
-            acompteRepository.save(a);
-        }
     }
 
     @Transactional

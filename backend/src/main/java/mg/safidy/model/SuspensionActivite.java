@@ -40,6 +40,30 @@ public class SuspensionActivite {
     @Column(name = "statut", nullable = false, length = 20)
     private String statut;
 
+    @Column(name = "type_evenement", length = 20)
+    private String typeEvenement;
+
+    @Column(name = "date_limite_declaration")
+    private LocalDate dateLimiteDeclaration;
+
+    @Column(name = "justificatif_ref", length = 60)
+    private String justificatifRef;
+
+    @Column(name = "carte_fiscale_restituee")
+    private Boolean carteFiscaleRestituee;
+
+    @Column(name = "impact_minimum_prorata")
+    private Long impactMinimumProrata;
+
+    @Column(name = "impact_acompte_suspendu")
+    private Long impactAcompteSuspendu;
+
+    @Column(name = "impact_credit_impot")
+    private Long impactCreditImpot;
+
+    @Column(name = "attestation_radiation_numero", length = 40)
+    private String attestationRadiationNumero;
+
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "id_agent_arret", nullable = false)
     private Agent agentArret;
@@ -108,6 +132,70 @@ public class SuspensionActivite {
 
     public void setStatut(String statut) {
         this.statut = statut;
+    }
+
+    public String getTypeEvenement() {
+        return typeEvenement;
+    }
+
+    public void setTypeEvenement(String typeEvenement) {
+        this.typeEvenement = typeEvenement;
+    }
+
+    public LocalDate getDateLimiteDeclaration() {
+        return dateLimiteDeclaration;
+    }
+
+    public void setDateLimiteDeclaration(LocalDate dateLimiteDeclaration) {
+        this.dateLimiteDeclaration = dateLimiteDeclaration;
+    }
+
+    public String getJustificatifRef() {
+        return justificatifRef;
+    }
+
+    public void setJustificatifRef(String justificatifRef) {
+        this.justificatifRef = justificatifRef;
+    }
+
+    public Boolean getCarteFiscaleRestituee() {
+        return carteFiscaleRestituee;
+    }
+
+    public void setCarteFiscaleRestituee(Boolean carteFiscaleRestituee) {
+        this.carteFiscaleRestituee = carteFiscaleRestituee;
+    }
+
+    public Long getImpactMinimumProrata() {
+        return impactMinimumProrata;
+    }
+
+    public void setImpactMinimumProrata(Long impactMinimumProrata) {
+        this.impactMinimumProrata = impactMinimumProrata;
+    }
+
+    public Long getImpactAcompteSuspendu() {
+        return impactAcompteSuspendu;
+    }
+
+    public void setImpactAcompteSuspendu(Long impactAcompteSuspendu) {
+        this.impactAcompteSuspendu = impactAcompteSuspendu;
+    }
+
+    public Long getImpactCreditImpot() {
+        return impactCreditImpot;
+    }
+
+    public void setImpactCreditImpot(Long impactCreditImpot) {
+        this.impactCreditImpot = impactCreditImpot;
+    }
+
+    public String getAttestationRadiationNumero() {
+        return attestationRadiationNumero;
+    }
+
+    public void setAttestationRadiationNumero(String attestationRadiationNumero) {
+        this.attestationRadiationNumero = attestationRadiationNumero;
     }
 
     public Agent getAgentArret() {

@@ -15,6 +15,8 @@ import {
   LuUser,
   LuChevronLeft,
   LuChevronRight,
+  LuChartColumn,
+  LuSettings,
 } from 'react-icons/lu';
 
 const items = [
@@ -26,10 +28,12 @@ const items = [
   { to: '/paiements',     label: 'Paiements',       icon: LuCreditCard },
   { to: '/penalites',     label: 'Penalites',       icon: LuTriangleAlert },
   { to: '/suspensions',   label: 'Arret / reprise', icon: LuCirclePause },
+  { to: '/statistiques',  label: 'Statistiques',    icon: LuChartColumn },
   { to: '/audit',         label: 'Journal d audit', icon: LuScrollText },
+  { to: '/admin',         label: 'Administration',  icon: LuSettings, role: 'ADMIN' },
 ];
 
-export default function Sidebar() {
+export default function Sidebar({ className = '' }) {
   const { agent, logout } = useAuth();
   const navigate = useNavigate();
   const [collapsed, setCollapsed] = useState(false);
@@ -56,7 +60,7 @@ export default function Sidebar() {
   };
 
   return (
-    <aside className={`sidebar ${collapsed ? 'collapsed' : ''}`}>
+    <aside className={`sidebar ${collapsed ? 'collapsed' : ''} ${className}`.trim()}>
       <div className="sidebar-brand">
         <div className="brand-logo">IR</div>
         <div className="brand-text">
@@ -74,7 +78,7 @@ export default function Sidebar() {
       </button>
 
       <nav className="sidebar-nav">
-        {items.map((item) => {
+        {items.filter((item) => !item.role || item.role === agent?.role).map((item) => {
           const Icon = item.icon;
           return (
             <NavLink

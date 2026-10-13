@@ -14,9 +14,9 @@
 -- ---------------------------------------------
 INSERT INTO AGENT (matricule, nom, prenom, email, mot_de_passe_hash, role, statut, id_centre)
 VALUES
-('ADMIN001', 'Rakoto',  'Admin',   'admin@safidy.mg',   '$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy', 'ADMIN',       'ACTIF', 1),
-('RESP001',  'Rabe',    'Sophie',  'resp@safidy.mg',    '$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy', 'RESPONSABLE', 'ACTIF', 1),
-('AGT001',   'Andry',   'Rado',    'agent@safidy.mg',   '$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy', 'AGENT',       'ACTIF', 1);
+('ADMIN001', 'Rakoto',  'Admin',   'admin@safidy.mg',   '$2a$10$5DoUGb3AstAKVrZBuNJFLenGR2RbmOhz0uFm45RXshwKWvuPm0JkG', 'ADMIN',       'ACTIF', 1),
+('RESP001',  'Rabe',    'Sophie',  'resp@safidy.mg',    '$2a$10$5DoUGb3AstAKVrZBuNJFLenGR2RbmOhz0uFm45RXshwKWvuPm0JkG', 'RESPONSABLE', 'ACTIF', 1),
+('AGT001',   'Andry',   'Rado',    'agent@safidy.mg',   '$2a$10$5DoUGb3AstAKVrZBuNJFLenGR2RbmOhz0uFm45RXshwKWvuPm0JkG', 'AGENT',       'ACTIF', 1);
 
 -- ---------------------------------------------
 -- Contribuables de test

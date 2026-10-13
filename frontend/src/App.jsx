@@ -13,6 +13,8 @@ import Paiements from './pages/Paiements';
 import Penalites from './pages/Penalites';
 import Suspensions from './pages/Suspensions';
 import Audit from './pages/Audit';
+import Statistiques from './pages/Statistiques';
+import Admin from './pages/Admin';
 
 export default function App() {
   return (
@@ -37,6 +39,8 @@ export default function App() {
             <Route path="/penalites" element={<Penalites />} />
             <Route path="/suspensions" element={<Suspensions />} />
             <Route path="/audit" element={<Audit />} />
+            <Route path="/statistiques" element={<Statistiques />} />
+            <Route path="/admin" element={<Admin />} />
           </Route>
           <Route path="/" element={<Navigate to="/dashboard" replace />} />
           <Route path="*" element={<Navigate to="/dashboard" replace />} />

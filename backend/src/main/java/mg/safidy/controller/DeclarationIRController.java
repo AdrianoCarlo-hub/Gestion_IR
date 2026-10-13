@@ -6,6 +6,7 @@ import mg.safidy.model.DeclarationIR;
 import mg.safidy.model.LigneCharge;
 import mg.safidy.repository.DeclarationIRRepository;
 import mg.safidy.service.DeclarationIRService;
+import mg.safidy.service.StatutAutomatiqueService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -20,17 +21,22 @@ public class DeclarationIRController {
     private final DeclarationIRService service;
     private final DeclarationIRRepository repo;
     private final AuditLogger audit;
+    private final StatutAutomatiqueService statutAutomatiqueService;
 
     public DeclarationIRController(DeclarationIRService service,
                                      DeclarationIRRepository repo,
-                                     AuditLogger audit) {
+                                     AuditLogger audit,
+                                     StatutAutomatiqueService statutAutomatiqueService) {
         this.service = service;
         this.repo = repo;
         this.audit = audit;
+        this.statutAutomatiqueService = statutAutomatiqueService;
     }
 
     @GetMapping
     public List<DeclarationIR> lister(@RequestParam(required = false) Integer annee) {
+        // Passage automatique en EN_RETARD des declarations echues (sans scheduler)
+        statutAutomatiqueService.appliquerRetards();
         if (annee != null) return service.listerParAnnee(annee);
         return service.lister();
     }
@@ -64,6 +70,14 @@ public class DeclarationIRController {
     public ResponseEntity<DeclarationIR> modifierCaHt(@PathVariable Long id,
                                                        @RequestParam Long caHt) {
         return ResponseEntity.ok(service.modifierCaHt(id, caHt));
+    }
+
+    @PutMapping("/{id}/mois-actifs")
+    public ResponseEntity<DeclarationIR> modifierMoisActifs(@PathVariable Long id,
+                                                             @RequestParam Integer moisActifs) {
+        DeclarationIR saved = service.modifierMoisActifs(id, moisActifs);
+        audit.log("MODIFICATION_MOIS_ACTIFS", "declaration_ir", id, "moisActifs=" + moisActifs);
+        return ResponseEntity.ok(saved);
     }
 
     @PostMapping("/{id}/charges")

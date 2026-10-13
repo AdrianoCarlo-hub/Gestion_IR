@@ -32,6 +32,11 @@ export const modifierCaHt = async (id, caHt) => {
   return data;
 };
 
+export const modifierMoisActifs = async (id, moisActifs) => {
+  const { data } = await api.put('/declarations/' + id + '/mois-actifs?moisActifs=' + moisActifs);
+  return data;
+};
+
 export const ajouterCharge = async (id, charge) => {
   const { data } = await api.post('/declarations/' + id + '/charges', charge);
   return data;

@@ -39,7 +39,10 @@ export default function Login() {
       await login(email, motDePasse);
       navigate('/dashboard', { replace: true });
     } catch (err) {
-      const msg = err.response?.data?.message || 'E-mail ou mot de passe incorrect';
+      const msg = err.response?.data?.message
+        || (!err.response
+          ? 'Serveur inaccessible. Verifiez que le backend est demarre et que son URL est correcte.'
+          : 'Erreur de connexion. Reessayez.');
       setError(msg);
     } finally {
       setLoading(false);

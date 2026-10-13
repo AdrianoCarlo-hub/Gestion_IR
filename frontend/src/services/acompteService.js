@@ -14,3 +14,30 @@ export const parStatut = async (statut) => {
   const { data } = await api.get('/acomptes/statut/' + statut);
   return data;
 };
+
+export const getSituation = async (idContribuable, annee) => {
+  const params = {};
+  if (annee) params.annee = annee;
+  const { data } = await api.get('/acomptes/situation/' + idContribuable, { params });
+  return data;
+};
+
+export const enregistrerDouane = async (payload) => {
+  const { data } = await api.post('/acomptes/douane', payload);
+  return data;
+};
+
+export const suspendre = async (id) => {
+  const { data } = await api.post('/acomptes/' + id + '/suspendre');
+  return data;
+};
+
+export const reactiver = async (id) => {
+  const { data } = await api.post('/acomptes/' + id + '/reactiver');
+  return data;
+};
+
+export const changerStatut = async (id, statut) => {
+  const { data } = await api.patch('/acomptes/' + id + '/statut', { statut });
+  return data;
+};

@@ -10,6 +10,7 @@ import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 
 @Entity
@@ -39,6 +40,24 @@ public class Penalite {
 
     @Column(name = "statut", nullable = false, length = 20)
     private String statut;
+
+    @Column(name = "motif", length = 60)
+    private String motif;
+
+    @Column(name = "base_calcul_ar")
+    private Long baseCalculAr;
+
+    @Column(name = "article_ref", length = 60)
+    private String articleRef;
+
+    @Column(name = "date_limite")
+    private LocalDate dateLimite;
+
+    @Column(name = "date_regularisation")
+    private LocalDate dateRegularisation;
+
+    @Column(name = "motif_annulation", length = 200)
+    private String motifAnnulation;
 
     @Column(name = "date_creation", nullable = false)
     private LocalDateTime dateCreation;
@@ -100,6 +119,54 @@ public class Penalite {
 
     public void setStatut(String statut) {
         this.statut = statut;
+    }
+
+    public String getMotif() {
+        return motif;
+    }
+
+    public void setMotif(String motif) {
+        this.motif = motif;
+    }
+
+    public Long getBaseCalculAr() {
+        return baseCalculAr;
+    }
+
+    public void setBaseCalculAr(Long baseCalculAr) {
+        this.baseCalculAr = baseCalculAr;
+    }
+
+    public String getArticleRef() {
+        return articleRef;
+    }
+
+    public void setArticleRef(String articleRef) {
+        this.articleRef = articleRef;
+    }
+
+    public LocalDate getDateLimite() {
+        return dateLimite;
+    }
+
+    public void setDateLimite(LocalDate dateLimite) {
+        this.dateLimite = dateLimite;
+    }
+
+    public LocalDate getDateRegularisation() {
+        return dateRegularisation;
+    }
+
+    public void setDateRegularisation(LocalDate dateRegularisation) {
+        this.dateRegularisation = dateRegularisation;
+    }
+
+    public String getMotifAnnulation() {
+        return motifAnnulation;
+    }
+
+    public void setMotifAnnulation(String motifAnnulation) {
+        this.motifAnnulation = motifAnnulation;
     }
 
     public LocalDateTime getDateCreation() {

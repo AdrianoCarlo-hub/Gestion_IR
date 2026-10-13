@@ -9,6 +9,7 @@ import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 
@@ -54,6 +55,9 @@ public class DeclarationIR {
 
     @Column(name = "base_imposable", nullable = false)
     private Long baseImposable;
+
+    @Column(name = "taux_ir", nullable = false, precision = 5, scale = 2)
+    private BigDecimal tauxIr;
 
     @Column(name = "ir_brut", nullable = false)
     private Long irBrut;
@@ -193,6 +197,14 @@ public class DeclarationIR {
 
     public Long getIrBrut() {
         return irBrut;
+    }
+
+    public BigDecimal getTauxIr() {
+        return tauxIr;
+    }
+
+    public void setTauxIr(BigDecimal tauxIr) {
+        this.tauxIr = tauxIr;
     }
 
     public void setIrBrut(Long irBrut) {

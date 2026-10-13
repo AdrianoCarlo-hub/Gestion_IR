@@ -31,8 +31,8 @@ DELETE FROM CONTRIBUABLE;
 -- ---------------------------------------------
 INSERT INTO AGENT (matricule, nom, prenom, email, mot_de_passe_hash, role, statut, tentatives_echec, id_centre)
 VALUES
-('RESP002', 'Randria', 'Paul',   'resp2@safidy.mg',  '$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy', 'RESPONSABLE', 'ACTIF', 0, 1),
-('AGT002',  'Rasoa',   'Marie',  'agent2@safidy.mg', '$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy', 'AGENT',       'ACTIF', 0, 1)
+('RESP002', 'Randria', 'Paul',   'resp2@safidy.mg',  '$2a$10$5DoUGb3AstAKVrZBuNJFLenGR2RbmOhz0uFm45RXshwKWvuPm0JkG', 'RESPONSABLE', 'ACTIF', 0, 1),
+('AGT002',  'Rasoa',   'Marie',  'agent2@safidy.mg', '$2a$10$5DoUGb3AstAKVrZBuNJFLenGR2RbmOhz0uFm45RXshwKWvuPm0JkG', 'AGENT',       'ACTIF', 0, 1)
 ON CONFLICT (matricule) DO NOTHING;
 
 -- ---------------------------------------------

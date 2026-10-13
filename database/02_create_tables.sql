@@ -47,6 +47,7 @@ CREATE TABLE SECTEUR_ACTIVITE (
     categorie    VARCHAR(20)   NOT NULL,
     min_fixe_ar  BIGINT        NOT NULL DEFAULT 0,
     min_pct_ca   NUMERIC(5,4)  NOT NULL DEFAULT 0,
+    taux_ir      NUMERIC(5,2),
     actif        BOOLEAN       NOT NULL DEFAULT TRUE,
     CONSTRAINT chk_secteur_categorie
         CHECK (categorie IN ('PRIORITAIRE','GENERAL','SANTE_EDUC','CARBURANT')),
@@ -140,6 +141,7 @@ CREATE TABLE DECLARATION_IR (
     total_deductions     BIGINT        NOT NULL DEFAULT 0,
     deficit_impute       BIGINT        NOT NULL DEFAULT 0,
     base_imposable       BIGINT        NOT NULL DEFAULT 0,
+    taux_ir              NUMERIC(5,2)  NOT NULL DEFAULT 20,
     ir_brut              BIGINT        NOT NULL DEFAULT 0,
     minimum_perception   BIGINT        NOT NULL DEFAULT 0,
     ir_du                BIGINT        NOT NULL DEFAULT 0,

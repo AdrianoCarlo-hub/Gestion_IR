@@ -3,8 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 
-const DUREE_INACTIVITE_MS = 20 * 1000; // 15 minutes
-const AVERTISSEMENT_AVANT_MS = 5 * 1000;   // toast 1 min avant
+const DUREE_INACTIVITE_MS = 15 * 60 * 1000; // 15 minutes
+const AVERTISSEMENT_AVANT_MS = 60 * 1000;   // toast 1 min avant
 
 export default function useInactivityLogout() {
   const { isAuth, logout } = useAuth();

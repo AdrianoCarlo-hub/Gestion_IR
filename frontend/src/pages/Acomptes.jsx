@@ -1,183 +1,250 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
+import { lister as listerContribuables } from '../services/contribuableService';
 import * as service from '../services/acompteService';
-import SearchBar from '../components/SearchBar';
-import { SkeletonTable } from '../components/Spinner';
-import { LuCalendar, LuPercent, LuDollarSign, LuUser, LuTriangleAlert } from "react-icons/lu";
+import ContribuableRecherche from '../components/ContribuableRecherche';
+import ConfirmDialog from '../components/ConfirmDialog';
+import AcompteCard from '../components/acomptes/AcompteCard';
+import AcompteDouaneModal from '../components/acomptes/AcompteDouaneModal';
+import SimulateurLiquidation from '../components/acomptes/SimulateurLiquidation';
+import { SkeletonTable, SkeletonStatsGrid } from '../components/Spinner';
+import { useToast } from '../context/ToastContext';
+import {
+  LuCircleDollarSign, LuCalendar, LuTrendingUp, LuWallet, LuShip,
+  LuPlus,
+} from 'react-icons/lu';
 
 const fmt = (n) => (n == null ? '0' : Number(n).toLocaleString('fr-FR').replace(/\u202f|\u00a0/g, ' '));
+const anneeCourante = new Date().getFullYear();
 
 export default function Acomptes() {
-  const [tous, setTous] = useState([]);
-  const [liste, setListe] = useState([]);
+  const toast = useToast();
+  const [contribuables, setContribuables] = useState([]);
+  const [selected, setSelected] = useState('');
+  const [annee, setAnnee] = useState(anneeCourante);
+  const [situation, setSituation] = useState(null);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
-  const [recherche, setRecherche] = useState('');
-  const [filtreStatut, setFiltreStatut] = useState('');
+  const [douaneOuvert, setDouaneOuvert] = useState(false);
+  const [confirm, setConfirm] = useState(null);
 
-  const charger = async () => {
+  useEffect(() => {
+    listerContribuables().then(setContribuables).catch(() => {});
+  }, []);
+
+  const charger = useCallback(async (id, an) => {
+    if (!id) { setSituation(null); return; }
     setLoading(true);
     try {
-      const data = await service.lister();
-      setTous(data);
-      setListe(data);
+      setSituation(await service.getSituation(id, an));
     } catch (e) {
-      setError(e.response?.data?.message || 'Erreur');
+      toast.error(e.response?.data?.message || 'Erreur de chargement');
+      setSituation(null);
     } finally {
       setLoading(false);
     }
+  }, [toast]);
+
+  useEffect(() => {
+    if (selected) charger(selected, annee);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selected, annee]);
+
+  const suspendre = (a) => {
+    setConfirm({
+      titre: 'Demander la suspension',
+      message: 'La suspension d un acompte provisionnel sans motif valable expose a une amende de 80 % (CDI art. 05.01.06). Confirmer ?',
+      texteConfirmer: 'Suspendre',
+      danger: true,
+      onConfirmer: async () => {
+        try {
+          await service.suspendre(a.idAcompte);
+          toast.success('Acompte suspendu');
+          charger(selected, annee);
+        } catch (e) {
+          toast.error(e.response?.data?.message || 'Erreur');
+        }
+      },
+    });
   };
 
-  useEffect(() => {
-    charger();
-  }, []);
-
-  useEffect(() => {
-    let resultat = [...tous];
-    if (recherche) {
-      const r = recherche.toLowerCase();
-      resultat = resultat.filter((a) =>
-        (a.contribuable?.raisonSociale || '').toLowerCase().includes(r) ||
-        (a.contribuable?.nif || '').includes(r) ||
-        String(a.annee).includes(r) ||
-        String(a.numero).includes(r)
-      );
+  const reactiver = async (a) => {
+    try {
+      await service.reactiver(a.idAcompte);
+      toast.success('Acompte reactive');
+      charger(selected, annee);
+    } catch (e) {
+      toast.error(e.response?.data?.message || 'Erreur');
     }
-    if (filtreStatut) {
-      resultat = resultat.filter((a) => a.statut === filtreStatut);
-    }
-    setListe(resultat);
-  }, [recherche, filtreStatut, tous]);
+  };
 
-  const totalMontant = liste.reduce((sum, a) => sum + (a.montantAr || 0), 0);
-  const acomptesEnCours = liste.filter(a => a.statut === 'A_PAYER').length;
-  const acomptesPayes = liste.filter(a => a.statut === 'PAYE').length;
+  const payer = async (a) => {
+    try {
+      await service.changerStatut(a.idAcompte, 'PAYE');
+      toast.success('Acompte regle');
+      charger(selected, annee);
+    } catch (e) {
+      toast.error(e.response?.data?.message || 'Erreur');
+    }
+  };
+
+  const enregistrerDouane = async (payload) => {
+    try {
+      await service.enregistrerDouane({ idContribuable: Number(selected), annee, ...payload });
+      toast.success('Quittance de douane enregistree');
+      setDouaneOuvert(false);
+      charger(selected, annee);
+    } catch (e) {
+      toast.error(e.response?.data?.message || 'Erreur');
+    }
+  };
+
+  const s = situation || { creation: [], provisionnels: [], douane: [] };
 
   return (
     <div className="page">
       <header className="page-header">
         <div>
           <h1>Acomptes</h1>
-          <p className="page-sub">Suivi des acomptes (2 x 50 % de l IR N-1)</p>
+          <p className="page-sub">Creation, provisionnels (2 x 50 %) et retenue douane</p>
         </div>
       </header>
 
-      {error && (
-        <div className="alert alert-error" style={{ marginBottom: 16 }}>
-          <span className="alert-icon">
-            <LuTriangleAlert className="icon" />
-          </span>
-          <span>{error}</span>
-        </div>
-      )}
-
-      <SearchBar
-        value={recherche}
-        onChange={setRecherche}
-        placeholder="Recherche (contribuable, annee, numero)"
-      >
-        <select
-          className="form-input"
-          value={filtreStatut}
-          onChange={(e) => setFiltreStatut(e.target.value)}
-          style={{ maxWidth: 180 }}
-        >
-          <option value="">Tous statuts</option>
-          <option value="A_PAYER">A payer</option>
-          <option value="PAYE">Paye</option>
-          <option value="EN_RETARD">En retard</option>
-          <option value="SUSPENDU">Suspendu</option>
-        </select>
-      </SearchBar>
-
-      <div className="cards-grid" style={{ marginBottom: 24 }}>
-        <div className="stat-card">
-          <div className="stat-card-header">
-            <div className="stat-card-icon">
-              <LuCalendar className="icon" style={{ width: 20, height: 20 }} />
-            </div>
+      <div className="form-panel" style={{ marginBottom: 16 }}>
+        <div className="form-row">
+          <div className="form-group" style={{ flex: 2 }}>
+            <label className="form-label">Contribuable</label>
+            <ContribuableRecherche
+              contribuables={contribuables}
+              value={selected}
+              onChange={(id) => setSelected(id)}
+            />
           </div>
-          <span className="stat-label">Total acomptes</span>
-          <span className="stat-value">{liste.length}</span>
-        </div>
-
-        <div className="stat-card financial encaisse">
-          <div className="stat-card-header">
-            <div className="stat-card-icon blue">
-              <LuDollarSign className="icon" style={{ width: 20, height: 20 }} />
-            </div>
+          <div className="form-group">
+            <label className="form-label">Annee</label>
+            <input type="number" className="form-input" value={annee}
+              onChange={(e) => setAnnee(Number(e.target.value))} />
           </div>
-          <span className="stat-label">Montant total</span>
-          <span className="stat-value">{fmt(totalMontant)} Ar</span>
-        </div>
-
-        <div className="stat-card financial reste">
-          <div className="stat-card-header">
-            <div className="stat-card-icon orange">
-              <LuPercent className="icon" style={{ width: 20, height: 20 }} />
-            </div>
-          </div>
-          <span className="stat-label">A payer</span>
-          <span className="stat-value">{acomptesEnCours}</span>
-        </div>
-
-        <div className="stat-card financial ir-du">
-          <div className="stat-card-header">
-            <div className="stat-card-icon">
-              <LuUser className="icon" style={{ width: 20, height: 20 }} />
-            </div>
-          </div>
-          <span className="stat-label">Payes</span>
-          <span className="stat-value">{acomptesPayes}</span>
         </div>
       </div>
 
-      {loading ? (
-        <SkeletonTable rows={5} cols={8} />
-      ) : liste.length === 0 ? (
+      {!selected ? (
         <div className="empty-state">
-          <div className="empty-state-icon">
-            <LuCalendar className="icon" />
-          </div>
-          <h3>Aucun acompte</h3>
-          <p>Les acomptes seront generes automatiquement lors de la validation des declarations</p>
+          <div className="empty-state-icon"><LuWallet className="icon" /></div>
+          <h3>Selectionnez un contribuable</h3>
+          <p>Choisissez un contribuable pour afficher sa situation d acomptes</p>
         </div>
+      ) : loading ? (
+        <>
+          <SkeletonStatsGrid count={4} />
+          <SkeletonTable rows={4} cols={5} />
+        </>
       ) : (
-        <div className="table-container">
-          <table className="data-table">
-            <thead>
-              <tr>
-                <th>Contribuable</th>
-                <th>Annee</th>
-                <th>N°</th>
-                <th>Taux</th>
-                <th>Base IR N-1</th>
-                <th>Montant</th>
-                <th>Echeance</th>
-                <th>Statut</th>
-              </tr>
-            </thead>
-            <tbody>
-              {liste.map((a) => (
-                <tr key={a.idAcompte}>
-                  <td>{a.contribuable?.raisonSociale || '-'}</td>
-                  <td>{a.annee}</td>
-                  <td><span className="badge badge-info">{a.numero}</span></td>
-                  <td>{a.tauxPct} %</td>
-                  <td>{fmt(a.baseIrN1)} Ar</td>
-                  <td><strong>{fmt(a.montantAr)} Ar</strong></td>
-                  <td>{a.dateEcheance}</td>
-                  <td>
-                    <span className={'badge badge-' + (a.statut || '').toLowerCase()}>
-                      {a.statut}
-                    </span>
-                  </td>
-                </tr>
+        <>
+          <div className="cards-grid" style={{ marginBottom: 24 }}>
+            <div className="stat-card financial encaisse">
+              <div className="stat-card-header">
+                <div className="stat-card-icon"><LuTrendingUp className="icon" style={{ width: 20, height: 20 }} /></div>
+              </div>
+              <span className="stat-label">IR N-1</span>
+              <span className="stat-value">{fmt(s.irN1)} Ar</span>
+            </div>
+            <div className="stat-card financial ir-du">
+              <div className="stat-card-header">
+                <div className="stat-card-icon blue"><LuCircleDollarSign className="icon" style={{ width: 20, height: 20 }} /></div>
+              </div>
+              <span className="stat-label">Total exigibles</span>
+              <span className="stat-value">{fmt(s.totalExigibles)} Ar</span>
+            </div>
+            <div className="stat-card financial encaisse">
+              <div className="stat-card-header">
+                <div className="stat-card-icon"><LuWallet className="icon" style={{ width: 20, height: 20 }} /></div>
+              </div>
+              <span className="stat-label">Cumul verse</span>
+              <span className="stat-value">{fmt(s.cumulVerse)} Ar</span>
+            </div>
+            <div className={'stat-card financial ' + (s.solde > 0 ? 'reste' : 'encaisse')}>
+              <div className="stat-card-header">
+                <div className="stat-card-icon orange"><LuCalendar className="icon" style={{ width: 20, height: 20 }} /></div>
+              </div>
+              <span className="stat-label">{s.creditImpot > 0 ? 'Credit d impot' : 'Solde'}</span>
+              <span className="stat-value">{fmt(s.creditImpot > 0 ? s.creditImpot : s.solde)} Ar</span>
+            </div>
+          </div>
+
+          <h3 className="section-title"><LuCalendar className="section-icon" /> Acomptes provisionnels</h3>
+          {s.provisionnels.length === 0 ? (
+            <div className="empty-state" style={{ padding: 24 }}>
+              <p>Aucun acompte provisionnel pour cette annee</p>
+            </div>
+          ) : (
+            <div className="acompte-grid">
+              {s.provisionnels.map((a) => (
+                <AcompteCard key={a.idAcompte} acompte={a}
+                  onSuspendre={suspendre} onReactiver={reactiver} onPayer={payer} />
               ))}
-            </tbody>
-          </table>
-        </div>
+            </div>
+          )}
+
+          <div className="douane-section">
+            <h3 className="section-title">
+              <LuShip className="section-icon" /> Acomptes en douane (AIRS)
+              <button className="btn btn-primary" style={{ marginLeft: 'auto' }}
+                onClick={() => setDouaneOuvert(true)}>
+                <LuPlus className="icon" /> Enregistrer quittance
+              </button>
+            </h3>
+            {s.douane.length === 0 ? (
+              <div className="empty-state" style={{ padding: 24 }}>
+                <p>Aucune quittance de douane enregistree</p>
+              </div>
+            ) : (
+              <div className="table-container">
+                <table className="data-table">
+                  <thead>
+                    <tr>
+                      <th>Date</th>
+                      <th>Reference douane</th>
+                      <th>Valeur CAF</th>
+                      <th>Taux</th>
+                      <th>Montant</th>
+                      <th>Statut</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {s.douane.map((a) => (
+                      <tr key={a.idAcompte}>
+                        <td>{a.dateEcheance}</td>
+                        <td>{a.referenceDouane || '-'}</td>
+                        <td>{fmt(a.baseIrN1)} Ar</td>
+                        <td>{a.tauxPct} %</td>
+                        <td><strong>{fmt(a.montantAr)} Ar</strong></td>
+                        <td><span className="badge badge-actif">{a.statut}</span></td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+
+          <SimulateurLiquidation cumulAcomptes={s.cumulVerse} />
+        </>
       )}
-      <p className="table-footer">{liste.length} resultat(s)</p>
+
+      <AcompteDouaneModal
+        ouvert={douaneOuvert}
+        onFermer={() => setDouaneOuvert(false)}
+        onValider={enregistrerDouane}
+      />
+
+      <ConfirmDialog
+        ouvert={!!confirm}
+        titre={confirm ? confirm.titre : ''}
+        message={confirm ? confirm.message : ''}
+        texteConfirmer={confirm ? confirm.texteConfirmer : 'Confirmer'}
+        danger={confirm ? !!confirm.danger : false}
+        onConfirmer={() => { if (confirm && confirm.onConfirmer) confirm.onConfirmer(); setConfirm(null); }}
+        onAnnuler={() => setConfirm(null)}
+      />
     </div>
   );
 }

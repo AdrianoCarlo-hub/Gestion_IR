@@ -30,6 +30,7 @@ export default function DeclarationForm({ idDeclaration, onRetour }) {
   const [declaration, setDeclaration] = useState(null);
   const [charges, setCharges] = useState([]);
   const [caHt, setCaHt] = useState(0);
+  const [moisActifs, setMoisActifs] = useState(12);
   const [reintegrations, setReintegrations] = useState(0);
   const [deductions, setDeductions] = useState(0);
   const [acomptes, setAcomptes] = useState(0);
@@ -48,6 +49,7 @@ export default function DeclarationForm({ idDeclaration, onRetour }) {
       const d = await service.trouver(idDeclaration);
       setDeclaration(d);
       setCaHt(d.caHt || 0);
+      setMoisActifs(d.moisActifs == null ? 12 : d.moisActifs);
       setReintegrations(d.totalReintegrations || 0);
       setDeductions(d.totalDeductions || 0);
       setAcomptes(d.acomptesVerses || 0);
@@ -70,6 +72,22 @@ export default function DeclarationForm({ idDeclaration, onRetour }) {
     try {
       await service.modifierCaHt(idDeclaration, Number(caHt));
       toast.success('Chiffre d affaires enregistre');
+      charger();
+    } catch (e) {
+      toast.error(e.response?.data?.message || 'Erreur');
+    }
+  };
+
+  const handleSauverMoisActifs = async () => {
+    setError('');
+    const valeur = Number(moisActifs);
+    if (Number.isNaN(valeur) || valeur < 0 || valeur > 12) {
+      setError('Mois actifs : valeur de 0 a 12');
+      return;
+    }
+    try {
+      await service.modifierMoisActifs(idDeclaration, valeur);
+      toast.success('Mois actifs enregistres');
       charger();
     } catch (e) {
       toast.error(e.response?.data?.message || 'Erreur');
@@ -317,6 +335,34 @@ export default function DeclarationForm({ idDeclaration, onRetour }) {
             )}
           </div>
 
+          <div className="form-panel" style={{ marginBottom: 16 }}>
+            <h3 className="section-title">Mois actifs (arret d activite)</h3>
+            <div className="form-row">
+              <div className="form-group" style={{ flex: 2 }}>
+                <label className="form-label">Mois actifs (0 a 12)</label>
+                <input
+                  type="number"
+                  className="form-input"
+                  value={moisActifs}
+                  onChange={(e) => setMoisActifs(e.target.value)}
+                  disabled={verrouille}
+                  min={0}
+                  max={12}
+                />
+                <p className="page-sub" style={{ marginTop: 4 }}>
+                  Le minimum de perception est proratise : part fixe x mois actifs / 12.
+                </p>
+              </div>
+              {!verrouille && (
+                <div className="form-group" style={{ flex: 0, justifyContent: 'flex-end' }}>
+                  <button className="btn-secondary" onClick={handleSauverMoisActifs}>
+                    Enregistrer mois actifs
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+
           <div className="form-panel">
             <h3 className="section-title">Ajustements et acomptes</h3>
             <div className="form-row">
@@ -382,7 +428,7 @@ export default function DeclarationForm({ idDeclaration, onRetour }) {
               <strong>{fmt(declaration.baseImposable)} Ar</strong>
             </div>
             <div className="result-line">
-              <span>IR brut (20 %)</span>
+              <span>IR brut ({declaration.tauxIr == null ? 20 : Number(declaration.tauxIr)} %)</span>
               <strong>{fmt(declaration.irBrut)} Ar</strong>
             </div>
             <div className="result-line">

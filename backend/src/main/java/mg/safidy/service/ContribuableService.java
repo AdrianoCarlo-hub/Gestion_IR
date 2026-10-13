@@ -23,15 +23,18 @@ public class ContribuableService {
     private final SecteurActiviteRepository secteurRepository;
     private final CentreFiscalRepository centreRepository;
     private final AgentRepository agentRepository;
+    private final AcompteService acompteService;
 
     public ContribuableService(ContribuableRepository contribuableRepository,
                                 SecteurActiviteRepository secteurRepository,
                                 CentreFiscalRepository centreRepository,
-                                AgentRepository agentRepository) {
+                                AgentRepository agentRepository,
+                                AcompteService acompteService) {
         this.contribuableRepository = contribuableRepository;
         this.secteurRepository = secteurRepository;
         this.centreRepository = centreRepository;
         this.agentRepository = agentRepository;
+        this.acompteService = acompteService;
     }
 
     public List<Contribuable> lister() {
@@ -62,7 +65,12 @@ public class ContribuableService {
         if (c.getStatut() == null) c.setStatut("ACTIF");
         if (c.getMoisCloture() == null) c.setMoisCloture(12);
         c.setDateCreation(LocalDateTime.now());
-        return contribuableRepository.save(c);
+        Contribuable saved = contribuableRepository.save(c);
+
+        // Regle : un acompte de debut d'activite (CREATION) est genere automatiquement.
+        acompteService.creerAcompteCreation(saved.getIdContribuable());
+
+        return saved;
     }
 
     @Transactional

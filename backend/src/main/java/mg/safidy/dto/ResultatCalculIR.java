@@ -1,7 +1,10 @@
 package mg.safidy.dto;
 
+import java.math.BigDecimal;
+
 public class ResultatCalculIR {
 
+    private BigDecimal tauxApplique;
     private Long caHt;
     private Long totalCharges;
     private Long totalChargesSansFacture;
@@ -20,6 +23,14 @@ public class ResultatCalculIR {
     private Long creditImpot;
 
     public ResultatCalculIR() {
+    }
+
+    public BigDecimal getTauxApplique() {
+        return tauxApplique;
+    }
+
+    public void setTauxApplique(BigDecimal tauxApplique) {
+        this.tauxApplique = tauxApplique;
     }
 
     public Long getCaHt() {

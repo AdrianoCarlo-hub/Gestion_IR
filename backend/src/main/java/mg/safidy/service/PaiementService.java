@@ -86,6 +86,20 @@ public class PaiementService {
             throw new BusinessException("Paiement doit viser une declaration ou un acompte");
         }
 
+        // Regle CT8 : un contribuable SUSPENDU/CESSE/RADIE ne peut payer
+        // que pour solder une dette existante.
+        String statutContribuable = c.getStatut();
+        if (!"ACTIF".equals(statutContribuable)) {
+            boolean soldeUneDette =
+                (d != null && d.getSoldeAPayer() != null && d.getSoldeAPayer() > 0)
+                || (a != null && !"PAYE".equals(a.getStatut()));
+            if (!soldeUneDette) {
+                throw new BusinessException(
+                    "Entreprise " + statutContribuable
+                    + " : paiement autorise uniquement pour solder une dette existante");
+            }
+        }
+
         Agent agent = agentRepository.findById(idAgent)
                 .orElseThrow(() -> new BusinessException("Agent introuvable"));
 
