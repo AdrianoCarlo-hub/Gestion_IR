@@ -6,11 +6,12 @@ import ConfirmDialog from '../components/ConfirmDialog';
 import AcompteCard from '../components/acomptes/AcompteCard';
 import AcompteDouaneModal from '../components/acomptes/AcompteDouaneModal';
 import SimulateurLiquidation from '../components/acomptes/SimulateurLiquidation';
+import ChronologiePaiements from '../components/acomptes/ChronologiePaiements';
 import { SkeletonTable, SkeletonStatsGrid } from '../components/Spinner';
 import { useToast } from '../context/ToastContext';
 import {
-  LuCircleDollarSign, LuCalendar, LuTrendingUp, LuWallet, LuShip,
-  LuPlus,
+  LuCalendar, LuCircleAlert, LuCircleCheck, LuClock3, LuCreditCard,
+  LuFileText, LuPackage, LuPlus, LuShip, LuTrendingUp, LuWallet,
 } from 'react-icons/lu';
 
 const fmt = (n) => (n == null ? '0' : Number(n).toLocaleString('fr-FR').replace(/\u202f|\u00a0/g, ' '));
@@ -33,7 +34,12 @@ export default function Acomptes() {
   }, []);
 
   const charger = useCallback(async (id, an) => {
-    if (!id) { setSituation(null); setEcheances(null); setChronologie([]); return; }
+    if (!id) {
+      setSituation(null);
+      setEcheances(null);
+      setChronologie([]);
+      return;
+    }
     setLoading(true);
     try {
       setSituation(await service.getSituation(id, an));
@@ -56,6 +62,7 @@ export default function Acomptes() {
   }, [toast]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (selected) charger(selected, annee);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selected, annee]);
@@ -110,180 +117,243 @@ export default function Acomptes() {
   };
 
   const s = situation || { creation: [], provisionnels: [], douane: [] };
+  const contribuableSelectionne = contribuables.find(
+    (contribuable) => String(contribuable.idContribuable) === String(selected)
+  );
+  const anneeCreation = contribuableSelectionne?.dateImmatriculation
+    ? new Date(contribuableSelectionne.dateImmatriculation).getFullYear()
+    : null;
+  const totalExigibles = s.totalExigibles || 0;
+  const cumulVerse = s.cumulVerse || 0;
+  const solde = s.creditImpot > 0 ? -s.creditImpot : (s.solde || 0);
+  const progression = totalExigibles > 0
+    ? Math.min(100, Math.round((cumulVerse / totalExigibles) * 100))
+    : 0;
+  const totalDouane = s.douane.reduce((total, acompte) => total + (acompte.montantAr || 0), 0);
+  const provisionnelMai = echeances?.eligible ? echeances.echeance15Mai : null;
+  const provisionnelNovembre = echeances?.eligible ? echeances.echeance15Novembre : null;
 
   return (
-    <div className="page">
-      <header className="page-header">
-        <div>
-          <h1>Acomptes</h1>
-          <p className="page-sub">Creation, provisionnels (2 x 50 %) et retenue douane</p>
+    <div className="page acomptes-page">
+      <header className="acomptes-header">
+        <div className="acomptes-header-title">
+          <span className="acomptes-eyebrow"><LuTrendingUp aria-hidden="true" /> Gestion fiscale</span>
+          <h1>Acomptes IR</h1>
+          <p className="page-sub">Exercice {annee} — Suivi des acomptes provisionnels et douaniers</p>
         </div>
-      </header>
-
-      <div className="form-panel" style={{ marginBottom: 16 }}>
-        <div className="form-row">
-          <div className="form-group" style={{ flex: 2 }}>
-            <label className="form-label">Contribuable</label>
+        <div className="acomptes-header-selector">
+          <div className="acomptes-selector-contribuable">
+            <label className="form-label" htmlFor="acompte-contribuable">Contribuable</label>
             <ContribuableRecherche
               contribuables={contribuables}
               value={selected}
               onChange={(id) => setSelected(id)}
             />
           </div>
-          <div className="form-group">
-            <label className="form-label">Annee</label>
-            <input type="number" className="form-input" value={annee}
-              onChange={(e) => setAnnee(Number(e.target.value))} />
+          <div className="acomptes-selector-annee">
+            <label className="form-label" htmlFor="acompte-annee">Exercice</label>
+            <input id="acompte-annee" type="number" className="form-input" value={annee}
+              min="2000" max="2100" onChange={(e) => setAnnee(Number(e.target.value))} />
           </div>
         </div>
-      </div>
+      </header>
 
       {!selected ? (
-        <div className="empty-state">
-          <div className="empty-state-icon"><LuWallet className="icon" /></div>
-          <h3>Selectionnez un contribuable</h3>
-          <p>Choisissez un contribuable pour afficher sa situation d acomptes</p>
+        <div className="acomptes-empty-state">
+          <span className="acomptes-empty-icon"><LuWallet aria-hidden="true" /></span>
+          <h2>Selectionnez un contribuable</h2>
+          <p>Choisissez un contribuable pour consulter ses echeances et paiements.</p>
         </div>
       ) : loading ? (
-        <>
+        <div className="acomptes-loading" aria-live="polite">
           <SkeletonStatsGrid count={4} />
           <SkeletonTable rows={4} cols={5} />
-        </>
+        </div>
       ) : (
-        <>
-          <div className="cards-grid" style={{ marginBottom: 24 }}>
-            <div className="stat-card financial encaisse">
-              <div className="stat-card-header">
-                <div className="stat-card-icon"><LuTrendingUp className="icon" style={{ width: 20, height: 20 }} /></div>
-              </div>
-              <span className="stat-label">IR N-1</span>
-              <span className="stat-value">{fmt(s.irN1)} Ar</span>
+        <div className="acomptes-content">
+          <section className="acomptes-kpi-section" aria-label="Synthese des acomptes">
+            <div className="acompte-kpi-grid">
+              <article className="acompte-kpi accent-blue">
+                <span className="kpi-icon"><LuFileText aria-hidden="true" /></span>
+                <span className="kpi-label">IR N-1</span>
+                <strong className="kpi-value">{fmt(s.irN1)} <small>Ar</small></strong>
+                <span className="kpi-caption">Base de reference des provisions</span>
+              </article>
+              <article className="acompte-kpi accent-green">
+                <span className="kpi-icon"><LuCircleCheck aria-hidden="true" /></span>
+                <span className="kpi-label">Total exigibles</span>
+                <strong className="kpi-value">{fmt(totalExigibles)} <small>Ar</small></strong>
+                <span className="kpi-caption">Echeances enregistrees pour {annee}</span>
+              </article>
+              <article className="acompte-kpi accent-emeraude">
+                <span className="kpi-icon"><LuCreditCard aria-hidden="true" /></span>
+                <span className="kpi-label">Cumul verse</span>
+                <strong className="kpi-value">{fmt(cumulVerse)} <small>Ar</small></strong>
+                <span className="kpi-caption">{progression} % des montants exigibles</span>
+                <span className="kpi-progress-bar" role="progressbar" aria-label="Progression des paiements"
+                  aria-valuemin="0" aria-valuemax="100" aria-valuenow={progression}>
+                  <span className="kpi-progress-fill" style={{ width: progression + '%' }} />
+                </span>
+              </article>
+              <article className={'acompte-kpi ' + (solde > 0 ? 'accent-red' : 'accent-green')}>
+                <span className="kpi-icon">
+                  {solde > 0 ? <LuCircleAlert aria-hidden="true" /> : <LuCircleCheck aria-hidden="true" />}
+                </span>
+                <span className="kpi-label">{solde > 0 ? 'Solde a payer' : 'Credit d impot'}</span>
+                <strong className="kpi-value">{fmt(Math.abs(solde))} <small>Ar</small></strong>
+                <span className="kpi-caption">{solde > 0 ? 'Reste sur les acomptes exigibles' : 'Aucun solde restant sur les acomptes'}</span>
+              </article>
             </div>
-            <div className="stat-card financial ir-du">
-              <div className="stat-card-header">
-                <div className="stat-card-icon blue"><LuCircleDollarSign className="icon" style={{ width: 20, height: 20 }} /></div>
-              </div>
-              <span className="stat-label">Total exigibles</span>
-              <span className="stat-value">{fmt(s.totalExigibles)} Ar</span>
-            </div>
-            <div className="stat-card financial encaisse">
-              <div className="stat-card-header">
-                <div className="stat-card-icon"><LuWallet className="icon" style={{ width: 20, height: 20 }} /></div>
-              </div>
-              <span className="stat-label">Cumul verse</span>
-              <span className="stat-value">{fmt(s.cumulVerse)} Ar</span>
-            </div>
-            <div className={'stat-card financial ' + (s.solde > 0 ? 'reste' : 'encaisse')}>
-              <div className="stat-card-header">
-                <div className="stat-card-icon orange"><LuCalendar className="icon" style={{ width: 20, height: 20 }} /></div>
-              </div>
-              <span className="stat-label">{s.creditImpot > 0 ? 'Credit d impot' : 'Solde'}</span>
-              <span className="stat-value">{fmt(s.creditImpot > 0 ? s.creditImpot : s.solde)} Ar</span>
-            </div>
-          </div>
+          </section>
 
-          <h3 className="section-title"><LuCalendar className="section-icon" /> Acomptes provisionnels</h3>
-          {echeances?.eligible && (
-            <div className="acompte-echeances-grid">
-              <div className="acompte-card">
-                <div className="acompte-card-head">
-                  <span className="acompte-card-title">
-                    <LuCalendar className="icon" /> Echeance du 15 mai {annee}
-                  </span>
-                  <span className="badge badge-info">SOLDE + ACOMPTE 1</span>
-                </div>
-                <div className="acompte-card-body">
-                  <div className="acompte-line">
-                    <span>Solde IR {annee - 1}</span>
-                    <strong>{fmt(echeances.echeance15Mai.soldeN1)} Ar</strong>
-                  </div>
-                  <div className="acompte-line">
-                    <span>Acompte 1 de {annee} (50 % IR {annee - 1})</span>
-                    <strong>{fmt(echeances.echeance15Mai.acompte1N)} Ar</strong>
-                  </div>
-                  <div className="acompte-line acompte-total">
-                    <span>Total a payer le 15 mai</span>
-                    <strong>{fmt(echeances.echeance15Mai.total)} Ar</strong>
-                  </div>
-                </div>
+          <section className="acomptes-section">
+            <div className="section-header">
+              <div>
+                <span className="acomptes-section-kicker">IR provisionnel</span>
+                <h2><LuCalendar aria-hidden="true" /> Acomptes provisionnels</h2>
               </div>
-              <div className="acompte-card">
-                <div className="acompte-card-head">
-                  <span className="acompte-card-title">
-                    <LuCalendar className="icon" /> Echeance du 15 novembre {annee}
-                  </span>
-                  <span className="badge badge-info">ACOMPTE 2</span>
-                </div>
-                <div className="acompte-card-body">
-                  <div className="acompte-line">
-                    <span>Acompte 2 de {annee} (50 % IR {annee - 1})</span>
-                    <strong>{fmt(echeances.echeance15Novembre.acompte2N)} Ar</strong>
+              <span className="section-badge">{s.provisionnels.length} echeance(s)</span>
+            </div>
+            {s.provisionnels.length === 0 ? (
+              provisionnelMai && provisionnelNovembre ? (
+                <div className="acomptes-provisionnels-grid">
+                  <div className="acompte-card acompte-card--schedule">
+                    <header className="acompte-card-header">
+                      <div className="acompte-card-heading">
+                        <span className="acompte-card-icon"><LuCalendar aria-hidden="true" /></span>
+                        <div><span className="acompte-card-overline">Premiere echeance</span>
+                          <h3 className="acompte-card-title">15 mai {annee}</h3></div>
+                      </div>
+                      <span className="badge badge-a_payer">A payer</span>
+                    </header>
+                    <div className="acompte-card-body">
+                      <div className="acompte-detail-ligne"><span>Solde IR {annee - 1}</span><strong>{fmt(provisionnelMai.soldeN1)} Ar</strong></div>
+                      <div className="acompte-detail-ligne"><span>Acompte 1 (50 % de l'IR N-1)</span><strong>{fmt(provisionnelMai.acompte1N)} Ar</strong></div>
+                      <div className="acompte-total-ligne"><span>Total au 15 mai</span><strong>{fmt(provisionnelMai.total)} Ar</strong></div>
+                    </div>
                   </div>
-                  <div className="acompte-line acompte-total">
-                    <span>Total a payer le 15 novembre</span>
-                    <strong>{fmt(echeances.echeance15Novembre.total)} Ar</strong>
+                  <div className="acompte-card acompte-card--schedule">
+                    <header className="acompte-card-header">
+                      <div className="acompte-card-heading">
+                        <span className="acompte-card-icon"><LuCalendar aria-hidden="true" /></span>
+                        <div><span className="acompte-card-overline">Seconde echeance</span>
+                          <h3 className="acompte-card-title">15 novembre {annee}</h3></div>
+                      </div>
+                      <span className="badge badge-a_payer">A payer</span>
+                    </header>
+                    <div className="acompte-card-body">
+                      <div className="acompte-detail-ligne"><span>Acompte 2 (50 % de l'IR N-1)</span><strong>{fmt(provisionnelNovembre.acompte2N)} Ar</strong></div>
+                      <div className="acompte-total-ligne"><span>Total au 15 novembre</span><strong>{fmt(provisionnelNovembre.total)} Ar</strong></div>
+                    </div>
                   </div>
                 </div>
-              </div>
-            </div>
-          )}
-          {s.provisionnels.length === 0 ? (
-            <div className="empty-state" style={{ padding: 24 }}>
-              <p>Aucun acompte provisionnel pour cette annee</p>
-            </div>
-          ) : (
-            <div className="acompte-grid">
-              {s.provisionnels.map((a) => (
-                <AcompteCard key={a.idAcompte} acompte={a}
-                  onSuspendre={suspendre} onReactiver={reactiver} onPayer={payer} />
-              ))}
-            </div>
-          )}
-
-          <div className="douane-section">
-            <h3 className="section-title">
-              <LuShip className="section-icon" /> Acomptes en douane (AIRS)
-              <button className="btn btn-primary" style={{ marginLeft: 'auto' }}
-                onClick={() => setDouaneOuvert(true)}>
-                <LuPlus className="icon" /> Enregistrer quittance
-              </button>
-            </h3>
-            {s.douane.length === 0 ? (
-              <div className="empty-state" style={{ padding: 24 }}>
-                <p>Aucune quittance de douane enregistree</p>
-              </div>
+              ) : (
+                <div className="acomptes-inline-empty">
+                  <LuClock3 aria-hidden="true" />
+                  <div><strong>Aucun acompte provisionnel enregistre</strong>
+                    <span>{echeances?.message || 'Les acomptes sont generes apres validation d une declaration IR N-1.'}</span></div>
+                </div>
+              )
             ) : (
-              <div className="table-container">
-                <table className="data-table">
-                  <thead>
-                    <tr>
-                      <th>Date</th>
-                      <th>Reference douane</th>
-                      <th>Valeur CAF</th>
-                      <th>Taux</th>
-                      <th>Montant</th>
-                      <th>Statut</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {s.douane.map((a) => (
-                      <tr key={a.idAcompte}>
-                        <td>{a.dateEcheance}</td>
-                        <td>{a.referenceDouane || '-'}</td>
-                        <td>{fmt(a.baseIrN1)} Ar</td>
-                        <td>{a.tauxPct} %</td>
-                        <td><strong>{fmt(a.montantAr)} Ar</strong></td>
-                        <td><span className="badge badge-actif">{a.statut}</span></td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+              <div className="acomptes-provisionnels-grid">
+                {s.provisionnels.map((acompte) => (
+                  <AcompteCard
+                    key={acompte.idAcompte}
+                    acompte={acompte}
+                    echeancesDetail={acompte.numero === 1 ? provisionnelMai : null}
+                    onSuspendre={suspendre}
+                    onReactiver={reactiver}
+                    onPayer={payer}
+                  />
+                ))}
               </div>
             )}
-          </div>
+          </section>
 
-          <SimulateurLiquidation cumulAcomptes={s.cumulVerse} chronologie={chronologie} />
-        </>
+          {s.creation.length > 0 && (
+            <section className="acomptes-section acompte-creation-section">
+              <div className="section-header">
+                <div><span className="acomptes-section-kicker">Debut d'activite</span>
+                  <h2><LuFileText aria-hidden="true" /> Acompte de creation</h2></div>
+                <span className="section-badge">{s.creation.length} acompte(s)</span>
+              </div>
+              <div className="acomptes-provisionnels-grid">
+                {s.creation.map((acompte) => (
+                  <article className="acompte-card acompte-card--creation" key={acompte.idAcompte}>
+                    <header className="acompte-card-header">
+                      <div className="acompte-card-heading">
+                        <span className="acompte-card-icon"><LuFileText aria-hidden="true" /></span>
+                        <div><span className="acompte-card-overline">Annee {acompte.annee}</span>
+                          <h3 className="acompte-card-title">Acompte de debut d'activite</h3></div>
+                      </div>
+                      <span className={'badge ' + (acompte.statut === 'PAYE' ? 'badge-actif' : 'badge-a_payer')}>{acompte.statut}</span>
+                    </header>
+                    <div className="acompte-card-body">
+                      <div className="acompte-detail-ligne"><span>Date</span><strong>{acompte.dateEcheance || '-'}</strong></div>
+                      <div className="acompte-total-ligne"><span>Montant</span><strong>{fmt(acompte.montantAr)} Ar</strong></div>
+                    </div>
+                  </article>
+                ))}
+              </div>
+            </section>
+          )}
+
+          <section className="acomptes-section douane-section">
+            <div className="section-header douane-header">
+              <div><span className="acomptes-section-kicker">AIRS · Retenue de 2 %</span>
+                <h2><LuPackage aria-hidden="true" /> Acomptes douaniers</h2></div>
+              <div className="section-stats">
+                <span>Total encaisse <strong>{fmt(totalDouane)} Ar</strong></span>
+                <span>{s.douane.length} quittance(s)</span>
+              </div>
+            </div>
+            <button className="btn btn-primary btn-add-douane" onClick={() => setDouaneOuvert(true)}>
+              <LuPlus aria-hidden="true" /> Enregistrer une quittance douaniere
+            </button>
+            {s.douane.length > 0 ? (
+              <div className="table-container acomptes-table-container">
+                <table className="data-table acomptes-table">
+                  <thead><tr><th>Date</th><th>Reference douane</th><th>Valeur CAF</th><th>Taux</th><th>Montant</th><th>Statut</th></tr></thead>
+                  <tbody>{s.douane.map((acompte) => (
+                    <tr key={acompte.idAcompte}>
+                      <td>{acompte.dateEcheance}</td><td>{acompte.referenceDouane || '-'}</td>
+                      <td>{fmt(acompte.baseIrN1)} Ar</td><td>{acompte.tauxPct} %</td>
+                      <td><strong>{fmt(acompte.montantAr)} Ar</strong></td>
+                      <td><span className="badge badge-actif">{acompte.statut}</span></td>
+                    </tr>
+                  ))}</tbody>
+                </table>
+              </div>
+            ) : (
+              <div className="acomptes-inline-empty acomptes-inline-empty--compact">
+                <LuShip aria-hidden="true" /><span>Aucune quittance de douane enregistree pour {annee}.</span>
+              </div>
+            )}
+          </section>
+
+          <section className="acomptes-section">
+            <div className="section-header">
+              <div><span className="acomptes-section-kicker">Estimation</span>
+                <h2><LuTrendingUp aria-hidden="true" /> Simulateur d'atterrissage fiscal</h2></div>
+            </div>
+            <SimulateurLiquidation cumulAcomptes={cumulVerse} />
+          </section>
+
+          <section className="acomptes-section">
+            <div className="section-header">
+              <div><span className="acomptes-section-kicker">Historique fiscal</span>
+                <h2><LuClock3 aria-hidden="true" /> Chronologie des paiements</h2></div>
+              <span className="section-badge">{chronologie.length} exercice(s)</span>
+            </div>
+            <ChronologiePaiements
+              anneeCreation={anneeCreation}
+              annee={annee}
+              irN1={s.irN1}
+              acomptesVerses={s.cumulVerse}
+              chronologie={chronologie}
+            />
+          </section>
+        </div>
       )}
 
       <AcompteDouaneModal

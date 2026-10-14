@@ -1,12 +1,14 @@
 package mg.safidy.controller;
 
 import mg.safidy.config.AuditLogger;
+import mg.safidy.dto.DeclarationIRSearchCriteria;
 import mg.safidy.exception.BusinessException;
 import mg.safidy.model.DeclarationIR;
 import mg.safidy.model.LigneCharge;
 import mg.safidy.repository.DeclarationIRRepository;
 import mg.safidy.service.DeclarationIRService;
 import mg.safidy.service.StatutAutomatiqueService;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -34,11 +36,49 @@ public class DeclarationIRController {
     }
 
     @GetMapping
-    public List<DeclarationIR> lister(@RequestParam(required = false) Integer annee) {
+    public List<DeclarationIR> lister(
+            @RequestParam(required = false) Integer annee,
+            @RequestParam(required = false) String statut,
+            @RequestParam(required = false) Long idContribuable,
+            @RequestParam(required = false) String nomContribuable,
+            @RequestParam(required = false) Long idAgent,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate dateDebut,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate dateFin,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate dateDepotFrom,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate dateDepotTo,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate dateCreationFrom,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate dateCreationTo,
+            @RequestParam(required = false) Long caHtMin,
+            @RequestParam(required = false) Long caHtMax,
+            @RequestParam(required = false) Long irDuMin,
+            @RequestParam(required = false) Long irDuMax,
+            @RequestParam(required = false) Long soldeAPayerMin,
+            @RequestParam(required = false) Long soldeAPayerMax,
+            @RequestParam(required = false) Integer moisActifs) {
         // Passage automatique en EN_RETARD des declarations echues (sans scheduler)
         statutAutomatiqueService.appliquerRetards();
-        if (annee != null) return service.listerParAnnee(annee);
-        return service.lister();
+        
+        DeclarationIRSearchCriteria criteria = new DeclarationIRSearchCriteria();
+        criteria.setAnnee(annee);
+        criteria.setStatut(statut);
+        criteria.setIdContribuable(idContribuable);
+        criteria.setNomContribuable(nomContribuable);
+        criteria.setIdAgent(idAgent);
+        criteria.setDateDebut(dateDebut);
+        criteria.setDateFin(dateFin);
+        criteria.setDateDepotFrom(dateDepotFrom);
+        criteria.setDateDepotTo(dateDepotTo);
+        criteria.setDateCreationFrom(dateCreationFrom);
+        criteria.setDateCreationTo(dateCreationTo);
+        criteria.setCaHtMin(caHtMin);
+        criteria.setCaHtMax(caHtMax);
+        criteria.setIrDuMin(irDuMin);
+        criteria.setIrDuMax(irDuMax);
+        criteria.setSoldeAPayerMin(soldeAPayerMin);
+        criteria.setSoldeAPayerMax(soldeAPayerMax);
+        criteria.setMoisActifs(moisActifs);
+        
+        return service.rechercher(criteria);
     }
 
     @GetMapping("/{id}")

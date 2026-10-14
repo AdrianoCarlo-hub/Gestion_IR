@@ -98,6 +98,7 @@ export default function Paiements() {
       setShowForm(false);
       setForm({ ...form, montantAr: '', idDeclaration: '' });
       charger();
+      listerDeclarations().then(setDeclarations).catch(() => {});
     } catch (err) {
       toast.error(err.response?.data?.message || 'Erreur');
     }
@@ -123,6 +124,9 @@ export default function Paiements() {
 
   const declarationsDuContribuable = declarations.filter(
     (d) => String(d.contribuable?.idContribuable) === String(form.idContribuable)
+  );
+  const declarationsSuivies = declarations.filter(
+    (d) => ['BROUILLON', 'PAYEE'].includes(d.statut)
   );
 
   const totalMontant = liste.reduce((sum, p) => sum + (p.montantAr || 0), 0);
@@ -201,6 +205,48 @@ export default function Paiements() {
           <span className="stat-value">{paiementsAnnules}</span>
         </div>
       </div>
+
+      <section className="form-panel" style={{ marginBottom: 16 }}>
+        <h3 className="section-title">
+          <LuFileText className="section-icon" />
+          Déclarations à valider et payées
+        </h3>
+        {declarationsSuivies.length === 0 ? (
+          <p style={{ color: '#94a3b8', fontSize: 13 }}>Aucune déclaration à valider ou payée</p>
+        ) : (
+          <div className="table-container">
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>NIF</th>
+                  <th>Contribuable</th>
+                  <th>Année</th>
+                  <th>IR dû</th>
+                  <th>Solde à payer</th>
+                  <th>Statut</th>
+                </tr>
+              </thead>
+              <tbody>
+                {declarationsSuivies.map((d) => (
+                  <tr key={d.idDeclaration}>
+                    <td>{d.contribuable?.nif || '-'}</td>
+                    <td>{d.contribuable?.raisonSociale || '-'}</td>
+                    <td>{d.annee}</td>
+                    <td>{fmt(d.irDu)} Ar</td>
+                    <td>{fmt(d.soldeAPayer)} Ar</td>
+                    <td>
+                      <span className={'badge badge-' + (d.statut || '').toLowerCase()}>
+                        {d.statut === 'BROUILLON' ? 'À VALIDER' : 'PAYÉE'}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+        <p className="table-footer">{declarationsSuivies.length} déclaration(s)</p>
+      </section>
 
       {showForm && (
         <form className="form-panel" onSubmit={handleSubmit} style={{ marginBottom: 16 }}>

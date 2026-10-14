@@ -14,6 +14,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.Comparator;
 import java.util.List;
 
 @Service
@@ -61,6 +62,7 @@ public class DeficitService {
                 .findByContribuableIdContribuableAndStatutOrderByAnneeOrigineAsc(idContribuable, "ACTIF")
                 .stream()
                 .filter(d -> d.getAnneeExpiration() >= anneeCourante)
+                .sorted(Comparator.comparingInt(Deficit::getAnneeOrigine))
                 .mapToLong(Deficit::getSolde)
                 .sum();
     }
@@ -117,6 +119,7 @@ public class DeficitService {
                 .stream()
                 .filter(d -> d.getAnneeExpiration() >= anneeCourante)
                 .filter(d -> d.getSolde() > 0)
+                .sorted(Comparator.comparingInt(Deficit::getAnneeOrigine))
                 .toList();
 
         long reste = baseImposableAvantDeficit;

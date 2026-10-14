@@ -13,11 +13,17 @@ const SEUIL_REEL_OBLIGATOIRE = 400000000;
 const fmt = (n) =>
   n == null ? '0' : Number(n).toLocaleString('fr-FR').replace(/\u202f|\u00a0/g, ' ');
 
+const normaliserRecherche = (valeur) =>
+  String(valeur ?? '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase();
+
 export default function Declarations() {
   const { agent } = useAuth();
   const [liste, setListe] = useState([]);
   const [contribuables, setContribuables] = useState([]);
-  const [annee, setAnnee] = useState('');
+  const [recherche, setRecherche] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
@@ -30,23 +36,10 @@ export default function Declarations() {
     setLoading(true);
     setError('');
     try {
-      const data = await service.lister(annee || undefined);
+      const data = await service.lister();
       setListe(data);
     } catch (e) {
       setError(e.response?.data?.message || 'Erreur de chargement');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const chargerAvec = async (a) => {
-    setLoading(true);
-    setError('');
-    try {
-      const data = await service.lister(a || undefined);
-      setListe(data);
-    } catch (e) {
-      setError(e.response?.data?.message || 'Erreur');
     } finally {
       setLoading(false);
     }
@@ -133,6 +126,23 @@ export default function Declarations() {
     charger();
   };
 
+  const termeRecherche = normaliserRecherche(recherche.trim());
+  const listeFiltree = termeRecherche
+    ? liste.filter((d) => {
+        const champs = [
+          d.contribuable?.nif ?? '-',
+          d.contribuable?.raisonSociale ?? '-',
+          d.annee,
+          fmt(d.irDu),
+          d.irDu,
+          fmt(d.soldeAPayer),
+          d.soldeAPayer,
+          d.statut,
+        ];
+        return champs.some((champ) => normaliserRecherche(champ).includes(termeRecherche));
+      })
+    : liste;
+
   return (
     <div className="page">
       <header className="page-header">
@@ -146,12 +156,9 @@ export default function Declarations() {
       {mode === 'liste' && (
         <>
           <SearchBar
-            value={annee}
-            onChange={(v) => {
-              setAnnee(v);
-              chargerAvec(v);
-            }}
-            placeholder="Recherche par annee (ex: 2026)"
+            value={recherche}
+            onChange={setRecherche}
+            placeholder="Rechercher par NIF, contribuable, annee, montant, statut..."
           >
             <button type="button" className="btn-secondary" onClick={handleNouvelle}>
               <LuPlus size={14} /> Nouvelle declaration
@@ -174,10 +181,12 @@ export default function Declarations() {
               <tbody>
                 {loading ? (
                   <tr><td colSpan={7} style={{ textAlign: 'center' }}>Chargement...</td></tr>
-                ) : liste.length === 0 ? (
-                  <tr><td colSpan={7} style={{ textAlign: 'center' }}>Aucune declaration</td></tr>
+                ) : listeFiltree.length === 0 ? (
+                  <tr><td colSpan={7} style={{ textAlign: 'center' }}>
+                    {termeRecherche ? 'Aucun resultat pour cette recherche' : 'Aucune declaration'}
+                  </td></tr>
                 ) : (
-                  liste.map((d) => (
+                  listeFiltree.map((d) => (
                     <tr key={d.idDeclaration}>
                       <td>{d.contribuable ? d.contribuable.nif : '-'}</td>
                       <td>{d.contribuable ? d.contribuable.raisonSociale : '-'}</td>
@@ -200,7 +209,7 @@ export default function Declarations() {
               </tbody>
             </table>
           </div>
-          <p className="table-footer">{liste.length} resultat(s)</p>
+          <p className="table-footer">{listeFiltree.length} resultat(s)</p>
         </>
       )}
 

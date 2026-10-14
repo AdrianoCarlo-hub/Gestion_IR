@@ -27,17 +27,20 @@ public class PaiementService {
     private final DeclarationIRRepository declarationRepository;
     private final AcompteRepository acompteRepository;
     private final AgentRepository agentRepository;
+    private final PenaliteService penaliteService;
 
     public PaiementService(PaiementRepository paiementRepository,
                             ContribuableRepository contribuableRepository,
                             DeclarationIRRepository declarationRepository,
                             AcompteRepository acompteRepository,
-                            AgentRepository agentRepository) {
+                            AgentRepository agentRepository,
+                            PenaliteService penaliteService) {
         this.paiementRepository = paiementRepository;
         this.contribuableRepository = contribuableRepository;
         this.declarationRepository = declarationRepository;
         this.acompteRepository = acompteRepository;
         this.agentRepository = agentRepository;
+        this.penaliteService = penaliteService;
     }
 
     public List<Paiement> lister() {
@@ -117,6 +120,22 @@ public class PaiementService {
         p.setDateCreation(LocalDateTime.now());
 
         Paiement saved = paiementRepository.save(p);
+
+        // ============================================================
+        // REGLE R2.1 : Penalite automatique si acompte paye en retard
+        // Taux 1%/mois (mois commence = mois entier)
+        // Base = montant de l'acompte (pas le solde)
+        // Pas d'amende de depot pour un acompte
+        // ============================================================
+        if (a != null && a.getDateEcheance() != null
+                && datePaiement.isAfter(a.getDateEcheance())) {
+            try {
+                penaliteService.calculerInteretRetardAcompte(idAcompte, datePaiement);
+            } catch (Exception ignore) {
+                // Ne pas bloquer le paiement si la penalite existe deja
+                // ou si une erreur non bloquante survient
+            }
+        }
 
         if (a != null) {
             a.setStatut("PAYE");

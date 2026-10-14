@@ -1,5 +1,6 @@
 package mg.safidy.service;
 
+import mg.safidy.dto.DeclarationIRSearchCriteria;
 import mg.safidy.dto.ResultatCalculIR;
 import mg.safidy.exception.BusinessException;
 import mg.safidy.model.Agent;
@@ -69,6 +70,10 @@ public class DeclarationIRService {
 
     public List<DeclarationIR> listerParAnnee(Integer annee) {
         return declarationRepository.findByAnneeOrderByDateCreationDesc(annee);
+    }
+
+    public List<DeclarationIR> rechercher(DeclarationIRSearchCriteria criteria) {
+        return declarationRepository.searchByCriteria(criteria);
     }
 
     public List<LigneCharge> listerCharges(Long idDeclaration) {
@@ -289,11 +294,17 @@ public class DeclarationIRService {
         }
 
         // Generation automatique de deficit si base < 0
-        if (r.getDeficitGenere() != null && r.getDeficitGenere() > 0) {
-            deficitService.creerAutomatique(
-                    d.getContribuable().getIdContribuable(),
-                    d.getAnnee(),
-                    r.getDeficitGenere());
+        if (r.getBaseAvantDeficit() != null && r.getBaseAvantDeficit() < 0) {
+            long montantDeficit = Math.abs(r.getBaseAvantDeficit());
+            if (r.getDeficitGenere() == null || r.getDeficitGenere() <= 0) {
+                r.setDeficitGenere(montantDeficit);
+            }
+            if (r.getDeficitGenere() > 0) {
+                deficitService.creerAutomatique(
+                        d.getContribuable().getIdContribuable(),
+                        d.getAnnee(),
+                        r.getDeficitGenere());
+            }
         }
 
         return saved;

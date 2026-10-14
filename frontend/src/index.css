@@ -2752,5 +2752,1631 @@ textarea.form-input {
 .combobox-empty { padding: 12px; text-align: center; color: #94a3b8; font-size: 13px; }
 
 /* ============================================================
-   FIN DES AJOUTS SAFIDY
+   PAGE ACOMPTES — Refonte JSX + styles dedies
+   ============================================================ */
+
+/* ===== 1. Layout general ===== */
+.acomptes-page {
+  --acomptes-primary: #0d2f2a;
+  --acomptes-green: #1a5c4a;
+  --acomptes-accent: #10b981;
+  --acomptes-ink: #152c28;
+  --acomptes-muted: #64748b;
+  --acomptes-line: #e2ece8;
+  --acomptes-soft: #f5faf7;
+  --acomptes-danger: #dc2626;
+  --acomptes-radius: 16px;
+  --acomptes-shadow: 0 12px 32px rgba(13, 47, 42, 0.07);
+  max-width: 1480px;
+  margin-inline: auto;
+  padding-bottom: 40px;
+}
+
+.acomptes-page h1,
+.acomptes-page h2,
+.acomptes-page h3,
+.acomptes-page p {
+  margin-top: 0;
+}
+
+.acomptes-header {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 28px;
+  margin-bottom: 24px;
+  padding: 24px;
+  border: 1px solid rgba(16, 185, 129, 0.15);
+  border-radius: 20px;
+  background:
+    radial-gradient(circle at 88% 0%, rgba(16, 185, 129, 0.12), transparent 30%),
+    linear-gradient(135deg, #ffffff 0%, #f3faf6 100%);
+  box-shadow: 0 10px 30px rgba(13, 47, 42, 0.045);
+}
+
+.acomptes-header-title {
+  min-width: 220px;
+}
+
+.acomptes-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  margin-bottom: 8px;
+  color: var(--acomptes-green);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.acomptes-eyebrow svg {
+  width: 14px;
+  height: 14px;
+}
+
+.acomptes-header-title h1 {
+  margin-bottom: 4px;
+  color: var(--acomptes-primary);
+  font-size: clamp(24px, 3vw, 32px);
+  font-weight: 800;
+  letter-spacing: -0.04em;
+  line-height: 1.1;
+}
+
+.acomptes-header-title .page-sub {
+  margin-bottom: 0;
+  color: var(--acomptes-muted);
+  font-size: 13px;
+}
+
+.acomptes-header-selector {
+  display: grid;
+  grid-template-columns: minmax(240px, 1fr) 150px;
+  align-items: end;
+  gap: 14px;
+  width: min(100%, 620px);
+}
+
+.acomptes-header-selector .form-group,
+.acomptes-header-selector .form-label {
+  margin-top: 0;
+}
+
+.acomptes-header-selector .form-label {
+  color: var(--acomptes-muted);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.acomptes-header-selector .form-input {
+  min-height: 44px;
+  border-color: #d9e7e1;
+  border-radius: 10px;
+  background: #fff;
+}
+
+.acomptes-selector-contribuable,
+.acomptes-selector-annee {
+  min-width: 0;
+}
+
+.acomptes-content {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  animation: acomptesContentEnter 0.4s ease both;
+}
+
+.acomptes-section {
+  min-width: 0;
+  padding: 22px;
+  border: 1px solid var(--acomptes-line);
+  border-radius: var(--acomptes-radius);
+  background: #fff;
+  box-shadow: 0 4px 18px rgba(13, 47, 42, 0.035);
+}
+
+.acomptes-section + .acomptes-section {
+  margin-top: 0;
+}
+
+.acomptes-kpi-section {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  margin-bottom: 18px;
+  padding-bottom: 14px;
+  border-bottom: 2px solid #edf3f0;
+}
+
+.section-header > div:first-child {
+  min-width: 0;
+}
+
+.section-header h2 {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0;
+  color: var(--acomptes-primary);
+  font-size: 17px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+
+.section-header h2 svg {
+  width: 19px;
+  height: 19px;
+  flex: 0 0 auto;
+  color: var(--acomptes-accent);
+}
+
+.acomptes-section-kicker {
+  display: block;
+  margin-bottom: 4px;
+  color: #80938d;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.section-badge {
+  flex: 0 0 auto;
+  padding: 6px 11px;
+  border: 1px solid #d6eee3;
+  border-radius: 999px;
+  background: #effaf4;
+  color: var(--acomptes-green);
+  font-size: 11px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+/* ===== 2. KPI ===== */
+.acompte-kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.acompte-kpi {
+  position: relative;
+  display: flex;
+  min-height: 164px;
+  flex-direction: column;
+  align-items: flex-start;
+  overflow: hidden;
+  padding: 19px 18px 16px;
+  border: 1px solid #e5eeea;
+  border-left: 4px solid #94a3b8;
+  border-radius: 14px;
+  background: #fff;
+  box-shadow: 0 5px 16px rgba(13, 47, 42, 0.045);
+  animation: kpiEnter 0.5s cubic-bezier(0.4, 0, 0.2, 1) backwards;
+  transition: transform 0.25s ease, box-shadow 0.25s ease;
+}
+
+.acompte-kpi:nth-child(1) {
+  animation-delay: 0.05s;
+}
+
+.acompte-kpi:nth-child(2) {
+  animation-delay: 0.1s;
+}
+
+.acompte-kpi:nth-child(3) {
+  animation-delay: 0.15s;
+}
+
+.acompte-kpi:nth-child(4) {
+  animation-delay: 0.2s;
+}
+
+.acompte-kpi:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 12px 26px rgba(13, 47, 42, 0.09);
+}
+
+.acompte-kpi::after {
+  position: absolute;
+  right: -28px;
+  bottom: -48px;
+  width: 116px;
+  height: 116px;
+  border-radius: 50%;
+  background: currentColor;
+  content: '';
+  opacity: 0.035;
+  pointer-events: none;
+}
+
+.acompte-kpi.accent-blue {
+  border-left-color: #3b82f6;
+  color: #2563eb;
+}
+
+.acompte-kpi.accent-green {
+  border-left-color: #16a34a;
+  color: #15803d;
+}
+
+.acompte-kpi.accent-emeraude {
+  border-left-color: var(--acomptes-accent);
+  color: #059669;
+}
+
+.acompte-kpi.accent-red {
+  border-left-color: var(--acomptes-danger);
+  color: #b91c1c;
+}
+
+.acompte-kpi .kpi-icon {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  display: grid;
+  width: 38px;
+  height: 38px;
+  place-items: center;
+  border-radius: 12px;
+  background: currentColor;
+  transition: transform 0.3s ease;
+}
+
+.acompte-kpi .kpi-icon svg {
+  width: 19px;
+  height: 19px;
+  color: #fff;
+}
+
+.acompte-kpi:hover .kpi-icon {
+  transform: rotate(-8deg) scale(1.08);
+}
+
+.acompte-kpi .kpi-label {
+  color: #72827d;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.acompte-kpi .kpi-value {
+  display: block;
+  max-width: calc(100% - 30px);
+  margin-top: 16px;
+  color: var(--acomptes-primary);
+  font-size: clamp(19px, 2vw, 25px);
+  font-weight: 800;
+  letter-spacing: -0.045em;
+  line-height: 1.15;
+  overflow-wrap: anywhere;
+}
+
+.acompte-kpi .kpi-value small {
+  color: #778780;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0;
+}
+
+.acompte-kpi .kpi-caption {
+  margin-top: 7px;
+  color: #84928d;
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.kpi-progress-bar {
+  display: block;
+  width: 100%;
+  height: 5px;
+  margin-top: auto;
+  overflow: hidden;
+  border-radius: 99px;
+  background: #e5f3ec;
+}
+
+.kpi-progress-fill {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #1a5c4a, #10b981);
+  transition: width 1s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* ===== 3. Cartes provisionnelles ===== */
+.acomptes-provisionnels-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.acomptes-page .acompte-card {
+  position: relative;
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 16px;
+  overflow: hidden;
+  padding: 18px;
+  border: 1px solid #e3ece8;
+  border-left: 4px solid #cbd5e1;
+  border-radius: 14px;
+  background: #fff;
+  box-shadow: 0 4px 14px rgba(13, 47, 42, 0.045);
+  animation: cardEnter 0.5s cubic-bezier(0.4, 0, 0.2, 1) backwards;
+  transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1),
+    box-shadow 0.25s ease, border-left-width 0.25s ease;
+}
+
+.acomptes-page .acompte-card:nth-child(1) {
+  animation-delay: 0.08s;
+}
+
+.acomptes-page .acompte-card:nth-child(2) {
+  animation-delay: 0.16s;
+}
+
+.acomptes-page .acompte-card:hover {
+  transform: translateY(-3px);
+  border-left-width: 6px;
+  box-shadow: 0 12px 24px rgba(13, 47, 42, 0.1);
+}
+
+.acomptes-page .acompte-statut-a_payer {
+  border-left-color: #f59e0b;
+}
+
+.acomptes-page .acompte-statut-paye {
+  border-left-color: var(--acomptes-accent);
+}
+
+.acomptes-page .acompte-statut-en_retard {
+  border-left-color: #dc2626;
+}
+
+.acomptes-page .acompte-statut-suspendu {
+  border-left-color: #64748b;
+}
+
+.acompte-card--schedule {
+  border-left-color: var(--acomptes-accent) !important;
+  background: linear-gradient(145deg, #fff 0%, #fafffc 100%);
+}
+
+.acompte-card--creation {
+  border-left-color: #3b82f6 !important;
+}
+
+.acompte-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.acompte-card-heading {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 11px;
+}
+
+.acompte-card-icon {
+  display: grid;
+  width: 42px;
+  height: 42px;
+  flex: 0 0 auto;
+  place-items: center;
+  border: 1px solid #d8f3e5;
+  border-radius: 13px;
+  background: #edfbf3;
+  color: var(--acomptes-green);
+}
+
+.acompte-card-icon svg {
+  width: 19px;
+  height: 19px;
+}
+
+.acompte-card-overline {
+  display: block;
+  margin-bottom: 3px;
+  color: #84928d;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.acomptes-page .acompte-card-title {
+  display: block;
+  margin: 0;
+  color: var(--acomptes-primary);
+  font-size: 14px;
+  font-weight: 800;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+
+.acompte-card-header .badge {
+  flex: 0 0 auto;
+}
+
+.acompte-card-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.acompte-detail-ligne {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 0;
+  border-bottom: 1px dashed #e7eeeb;
+  color: #64756f;
+  font-size: 12px;
+}
+
+.acompte-detail-ligne > span {
+  min-width: 0;
+}
+
+.acompte-detail-ligne strong {
+  color: #263b35;
+  font-weight: 700;
+  text-align: right;
+}
+
+.acompte-detail-ligne.acompte-montant strong {
+  color: var(--acomptes-green);
+  font-size: 15px;
+  font-weight: 800;
+}
+
+.acompte-date > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.acompte-date svg {
+  width: 14px;
+  height: 14px;
+  color: #82918b;
+}
+
+.acompte-total-ligne {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  overflow: hidden;
+  margin: 10px -4px -3px;
+  padding: 12px 10px;
+  border: 1px solid #d9f3e4;
+  border-radius: 10px;
+  background: #f0fdf4;
+  color: #176244;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.acompte-total-ligne::after {
+  position: absolute;
+  inset: 0 auto 0 -100%;
+  width: 60%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.58), transparent);
+  animation: shimmer 5s ease-in-out infinite;
+  content: '';
+  pointer-events: none;
+}
+
+.acompte-total-ligne strong {
+  color: var(--acomptes-primary);
+  font-size: 14px;
+  font-weight: 850;
+  white-space: nowrap;
+}
+
+.acompte-card-footer {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: auto;
+  padding-top: 2px;
+}
+
+.acompte-card-footer .btn {
+  display: inline-flex;
+  min-height: 36px;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 8px 11px;
+  border-radius: 9px;
+  font-size: 11px;
+}
+
+.acompte-card-footer .btn svg {
+  width: 15px;
+  height: 15px;
+}
+
+.acomptes-page .badge {
+  padding: 5px 9px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+}
+
+.acomptes-inline-empty {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  padding: 17px;
+  border: 1px dashed #cbded4;
+  border-radius: 12px;
+  background: #f8fcf9;
+  color: #71827b;
+}
+
+.acomptes-inline-empty > svg {
+  width: 21px;
+  height: 21px;
+  flex: 0 0 auto;
+  color: #66a88b;
+}
+
+.acomptes-inline-empty > div {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.acomptes-inline-empty strong {
+  color: var(--acomptes-primary);
+  font-size: 13px;
+}
+
+.acomptes-inline-empty span {
+  font-size: 12px;
+}
+
+.acomptes-inline-empty--compact {
+  padding: 12px 14px;
+}
+
+/* ===== 4. Creation et douane ===== */
+.acompte-creation-section {
+  background: linear-gradient(160deg, #fff 0%, #f8fbff 100%);
+}
+
+.douane-section {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.douane-header {
+  align-items: center;
+}
+
+.section-stats {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.section-stats span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 7px 10px;
+  border: 1px solid #e4eee9;
+  border-radius: 9px;
+  background: #f8fbf9;
+  color: #71817b;
+  font-size: 11px;
+}
+
+.section-stats strong {
+  color: var(--acomptes-primary);
+  font-size: 12px;
+}
+
+.btn-add-douane {
+  display: inline-flex;
+  min-height: 42px;
+  align-items: center;
+  align-self: flex-start;
+  gap: 8px;
+  margin-top: 0;
+  padding-inline: 16px;
+  border-radius: 10px;
+}
+
+.btn-add-douane svg {
+  width: 17px;
+  height: 17px;
+}
+
+.acomptes-table-container {
+  width: 100%;
+  overflow-x: auto;
+  border: 1px solid #e7efeb;
+  border-radius: 12px;
+}
+
+.acomptes-table {
+  min-width: 640px;
+  margin: 0;
+}
+
+.acomptes-table thead th {
+  background: #f4faf6;
+  color: #52665e;
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.acomptes-table tbody tr {
+  transition: background 0.18s ease;
+}
+
+.acomptes-table tbody tr:hover {
+  background: #f8fcf9;
+}
+
+.acomptes-table tbody td strong {
+  color: var(--acomptes-primary);
+}
+
+/* ===== 5. Simulateur ===== */
+.simulateur-panel {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(280px, 0.85fr);
+  align-items: stretch;
+  gap: 20px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.simulateur-inputs {
+  padding: 18px;
+  border: 1px solid #e4eee9;
+  border-radius: 13px;
+  background: #fbfdfb;
+}
+
+.simulateur-champ {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px 14px;
+}
+
+.simulateur-champ .form-group {
+  min-width: 0;
+}
+
+.simulateur-champ .form-group:last-child {
+  grid-column: 1 / -1;
+  max-width: 220px;
+}
+
+.simulateur-champ .form-label {
+  margin-top: 0;
+  color: #71817b;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.simulateur-champ .form-input {
+  min-height: 42px;
+  border-radius: 9px;
+}
+
+.simulateur-resultats {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  overflow: hidden;
+  padding: 18px 20px;
+  border: 1px solid #17433a;
+  border-radius: 13px;
+  background: linear-gradient(145deg, #0d2f2a 0%, #164b3e 100%);
+  color: #fff;
+  box-shadow: 0 10px 24px rgba(13, 47, 42, 0.14);
+}
+
+.simulateur-resultats h3 {
+  margin-bottom: 8px;
+  padding-bottom: 11px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.15);
+  color: #a7f3d0;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.simulateur-ligne {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 9px 0;
+  border-bottom: 1px dashed rgba(255, 255, 255, 0.14);
+  color: #d6e6df;
+  font-size: 12px;
+}
+
+.simulateur-ligne:last-child {
+  border-bottom: 0;
+}
+
+.simulateur-ligne strong {
+  color: #fff;
+  font-size: 13px;
+  font-weight: 800;
+  text-align: right;
+}
+
+.simulateur-ligne.reste-a-payer,
+.simulateur-ligne.reste-a-payer strong {
+  color: #fecaca;
+}
+
+.simulateur-ligne.credit,
+.simulateur-ligne.credit strong {
+  color: #a7f3d0;
+}
+
+/* ===== 6. Chronologie ===== */
+.chronologie {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  padding: 4px 0 4px 8px;
+}
+
+.chronologie::before {
+  position: absolute;
+  top: 22px;
+  bottom: 28px;
+  left: 22px;
+  width: 2px;
+  background: linear-gradient(180deg, #10b981, #d7ebe0);
+  content: '';
+}
+
+.chronologie-etape {
+  position: relative;
+  display: grid;
+  grid-template-columns: 30px minmax(0, 1fr);
+  gap: 15px;
+  padding: 0 0 20px;
+  animation: timelineEnter 0.45s ease both;
+}
+
+.chronologie-etape:nth-child(2) {
+  animation-delay: 0.08s;
+}
+
+.chronologie-etape:nth-child(3) {
+  animation-delay: 0.16s;
+}
+
+.chronologie-etape:last-child {
+  padding-bottom: 0;
+}
+
+.chronologie-etape.is-current .chronologie-contenu {
+  border-color: #9ddbb8;
+  box-shadow: 0 7px 20px rgba(16, 185, 129, 0.09);
+}
+
+.chronologie-point {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  width: 30px;
+  height: 30px;
+  place-items: center;
+  border: 3px solid #fff;
+  border-radius: 50%;
+  background: #e6f8ed;
+  color: var(--acomptes-green);
+  box-shadow: 0 0 0 1px #c9ead6;
+  animation: pointPop 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) backwards;
+}
+
+.chronologie-point svg {
+  width: 14px;
+  height: 14px;
+}
+
+.chronologie-etape--creation .chronologie-point {
+  background: #f1f5f9;
+  color: #64748b;
+  box-shadow: 0 0 0 1px #d9e2e9;
+}
+
+.chronologie-contenu {
+  min-width: 0;
+  padding: 15px 17px;
+  border: 1px solid #e5eee9;
+  border-radius: 13px;
+  background: #fff;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.chronologie-date {
+  display: inline-block;
+  margin-bottom: 5px;
+  color: #19845b;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.chronologie-contenu h3 {
+  margin-bottom: 9px;
+  color: var(--acomptes-primary);
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.chronologie-contenu p {
+  margin-bottom: 0;
+  color: #6d7d76;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.chronologie-lignes {
+  display: flex;
+  flex-direction: column;
+}
+
+.chronologie-lignes > div {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 7px 0;
+  border-bottom: 1px dashed #e7eeeb;
+  color: #65766f;
+  font-size: 12px;
+}
+
+.chronologie-lignes > div strong {
+  color: #233a32;
+  font-weight: 750;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.chronologie-lignes > div.chronologie-total {
+  margin-top: 6px;
+  padding: 10px 11px;
+  border: 1px solid #d5f0e0;
+  border-radius: 9px;
+  background: #f0fdf4;
+  color: #176244;
+  font-weight: 800;
+}
+
+.chronologie-lignes > div.chronologie-total strong {
+  color: var(--acomptes-primary);
+  font-size: 13px;
+}
+
+.chronologie-note {
+  margin-top: 10px;
+  padding-top: 9px;
+  border-top: 1px solid #edf2ef;
+  color: #70817a;
+  font-size: 11px;
+}
+
+.chronologie-vide {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 20px;
+  border: 1px dashed #d6e5dc;
+  border-radius: 12px;
+  color: #788982;
+}
+
+.chronologie-vide svg {
+  width: 22px;
+  height: 22px;
+  flex: 0 0 auto;
+  color: #68a98a;
+}
+
+.chronologie-vide p {
+  margin: 0;
+  font-size: 13px;
+}
+
+/* ===== 7. Modal et interactions ===== */
+.acomptes-modal-overlay {
+  z-index: 1200;
+  padding: 20px;
+  background: rgba(9, 31, 27, 0.58);
+  backdrop-filter: blur(5px);
+  animation: overlayEnter 0.2s ease both;
+}
+
+.acomptes-modal {
+  width: min(100%, 520px);
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.7);
+  border-radius: 18px;
+  box-shadow: 0 26px 80px rgba(7, 29, 24, 0.28);
+  animation: modalEnter 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.acomptes-modal-header {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  padding: 20px 22px;
+  border-bottom: 1px solid #edf2ef;
+  background: linear-gradient(135deg, #fff, #f3faf6);
+}
+
+.acompte-modal-icon {
+  display: grid;
+  width: 44px;
+  height: 44px;
+  flex: 0 0 auto;
+  place-items: center;
+  border-radius: 13px;
+  background: #e4f8eb;
+  color: var(--acomptes-green);
+}
+
+.acompte-modal-icon svg {
+  width: 21px;
+  height: 21px;
+}
+
+.acompte-modal-eyebrow {
+  display: block;
+  margin-bottom: 3px;
+  color: #19845b;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.acomptes-modal-header h3 {
+  margin: 0;
+  color: var(--acomptes-primary);
+  font-size: 16px;
+  font-weight: 800;
+}
+
+.acomptes-modal-header .btn-icon {
+  margin-left: auto;
+  border-radius: 9px;
+}
+
+.acomptes-modal form {
+  display: flex;
+  flex-direction: column;
+}
+
+.acomptes-modal-body {
+  display: grid;
+  gap: 9px;
+  padding: 18px 22px;
+}
+
+.acomptes-modal-body .form-group {
+  margin: 0;
+}
+
+.acomptes-modal-body .form-label {
+  margin-top: 0;
+  color: #50645b;
+  font-size: 11px;
+  font-weight: 750;
+}
+
+.acomptes-modal-body .form-input {
+  min-height: 42px;
+  border-radius: 9px;
+}
+
+.acomptes-modal-recap {
+  align-items: center;
+  margin-top: 4px;
+  padding: 14px;
+  border: 1px solid #d8f2e2;
+  border-radius: 11px;
+  background: #f1fbf5;
+}
+
+.acomptes-modal-recap > span {
+  color: #567467;
+  font-size: 11px;
+}
+
+.acomptes-modal-recap > div {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+}
+
+.acomptes-modal-recap small {
+  color: #71877d;
+  font-size: 10px;
+}
+
+.acomptes-modal-recap strong {
+  color: var(--acomptes-primary);
+  font-size: 17px;
+  font-weight: 850;
+}
+
+.acomptes-modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 9px;
+  padding: 15px 22px 20px;
+  border-top: 1px solid #edf2ef;
+}
+
+.acomptes-modal-footer .btn {
+  min-height: 40px;
+  margin: 0;
+  border-radius: 9px;
+}
+
+.acomptes-page .btn-primary,
+.acomptes-modal .btn-primary {
+  position: relative;
+  overflow: hidden;
+}
+
+.acomptes-page .btn-primary::after,
+.acomptes-modal .btn-primary::after {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 5px;
+  height: 5px;
+  transform: translate(-50%, -50%) scale(0);
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.4);
+  content: '';
+  opacity: 0;
+  pointer-events: none;
+}
+
+.acomptes-page .btn-primary:active::after,
+.acomptes-modal .btn-primary:active::after {
+  animation: ripple 0.6s ease-out;
+}
+
+.acomptes-page button,
+.acomptes-page input,
+.acomptes-modal button,
+.acomptes-modal input {
+  transition-duration: 0.2s;
+}
+
+/* ===== 8. Etats vides et chargement ===== */
+.acomptes-empty-state {
+  display: flex;
+  min-height: 300px;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 32px 20px;
+  border: 1px dashed #cfe1d6;
+  border-radius: 18px;
+  background: linear-gradient(145deg, #fff, #f7fbf8);
+  text-align: center;
+}
+
+.acomptes-empty-icon {
+  display: grid;
+  width: 58px;
+  height: 58px;
+  margin-bottom: 15px;
+  place-items: center;
+  border: 1px solid #d8f2e2;
+  border-radius: 18px;
+  background: #eaf9ef;
+  color: var(--acomptes-green);
+}
+
+.acomptes-empty-icon svg {
+  width: 26px;
+  height: 26px;
+}
+
+.acomptes-empty-state h2 {
+  margin-bottom: 6px;
+  color: var(--acomptes-primary);
+  font-size: 17px;
+  font-weight: 800;
+}
+
+.acomptes-empty-state p {
+  max-width: 400px;
+  margin-bottom: 0;
+  color: #71817b;
+  font-size: 13px;
+}
+
+.acomptes-loading {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+/* ===== 9. Animations ===== */
+@keyframes acomptesContentEnter {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes kpiEnter {
+  from {
+    opacity: 0;
+    transform: translateY(12px) scale(0.98);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes cardEnter {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes timelineEnter {
+  from {
+    opacity: 0;
+    transform: translateX(-8px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes pointPop {
+  from {
+    transform: scale(0);
+  }
+
+  60% {
+    transform: scale(1.15);
+  }
+
+  to {
+    transform: scale(1);
+  }
+}
+
+@keyframes modalEnter {
+  from {
+    opacity: 0;
+    transform: translateY(-16px) scale(0.96);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes overlayEnter {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes ripple {
+  to {
+    transform: translate(-50%, -50%) scale(50);
+    opacity: 0;
+  }
+}
+
+@keyframes shimmer {
+  0%,
+  88% {
+    left: -100%;
+  }
+
+  100% {
+    left: 160%;
+  }
+}
+
+/* ===== 10. Tablette ===== */
+@media (max-width: 1200px) {
+  .acompte-kpi-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .acomptes-provisionnels-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .simulateur-panel {
+    grid-template-columns: 1fr;
+  }
+
+  .simulateur-champ {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .simulateur-champ .form-group:last-child {
+    grid-column: auto;
+    max-width: none;
+  }
+}
+
+@media (max-width: 900px) {
+  .acomptes-header {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 20px;
+  }
+
+  .acomptes-header-selector {
+    width: 100%;
+  }
+
+  .acomptes-section {
+    padding: 18px;
+  }
+
+  .section-header {
+    align-items: flex-start;
+  }
+
+  .section-stats {
+    justify-content: flex-start;
+  }
+}
+
+/* ===== 11. Mobile large ===== */
+@media (max-width: 768px) {
+  .acomptes-page {
+    padding: 14px 12px 28px;
+  }
+
+  .acomptes-header {
+    margin-bottom: 18px;
+    padding: 19px;
+    border-radius: 16px;
+  }
+
+  .acomptes-header-selector {
+    grid-template-columns: minmax(0, 1fr) 128px;
+    gap: 10px;
+  }
+
+  .acomptes-content {
+    gap: 17px;
+  }
+
+  .acompte-kpi-grid {
+    gap: 10px;
+  }
+
+  .acompte-kpi {
+    min-height: 150px;
+    padding: 15px;
+  }
+
+  .acomptes-section {
+    padding: 16px;
+    border-radius: 14px;
+  }
+
+  .section-header {
+    margin-bottom: 14px;
+    padding-bottom: 11px;
+  }
+
+  .section-header h2 {
+    font-size: 15px;
+  }
+
+  .acompte-card-header {
+    align-items: flex-start;
+  }
+
+  .acompte-card-footer .btn {
+    flex: 1 1 auto;
+  }
+
+  .simulateur-champ {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .simulateur-champ .form-group:last-child {
+    grid-column: 1 / -1;
+    max-width: 100%;
+  }
+
+  .acomptes-table {
+    font-size: 12px;
+  }
+
+  .acomptes-table thead th,
+  .acomptes-table tbody td {
+    padding: 9px 10px;
+  }
+}
+
+/* ===== 12. Mobile compact ===== */
+@media (max-width: 640px) {
+  .acomptes-page {
+    padding: 10px 9px 24px;
+  }
+
+  .acomptes-header {
+    gap: 16px;
+    padding: 16px;
+  }
+
+  .acomptes-header-title h1 {
+    font-size: 25px;
+  }
+
+  .acomptes-header-selector {
+    grid-template-columns: 1fr;
+  }
+
+  .acomptes-selector-annee {
+    max-width: none;
+  }
+
+  .acompte-kpi-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .acompte-kpi {
+    min-height: 135px;
+  }
+
+  .acompte-kpi .kpi-value {
+    font-size: 22px;
+  }
+
+  .acomptes-section {
+    padding: 14px;
+  }
+
+  .section-header {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .section-badge {
+    align-self: flex-start;
+  }
+
+  .section-stats {
+    justify-content: flex-start;
+  }
+
+  .acomptes-page .acompte-card {
+    padding: 15px;
+  }
+
+  .acompte-card-header {
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .acompte-card-header .badge {
+    align-self: flex-start;
+  }
+
+  .acompte-detail-ligne {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 3px;
+  }
+
+  .acompte-detail-ligne strong {
+    text-align: left;
+  }
+
+  .acompte-total-ligne {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 5px;
+  }
+
+  .acompte-total-ligne strong {
+    font-size: 16px;
+  }
+
+  .btn-add-douane {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .simulateur-champ {
+    grid-template-columns: 1fr;
+  }
+
+  .simulateur-champ .form-group:last-child {
+    grid-column: auto;
+  }
+
+  .simulateur-inputs,
+  .simulateur-resultats {
+    padding: 15px;
+  }
+
+  .simulateur-ligne {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .simulateur-ligne strong {
+    text-align: left;
+  }
+
+  .chronologie {
+    padding-left: 0;
+  }
+
+  .chronologie::before {
+    display: none;
+  }
+
+  .chronologie-etape {
+    grid-template-columns: 26px minmax(0, 1fr);
+    gap: 10px;
+    padding-bottom: 14px;
+  }
+
+  .chronologie-point {
+    width: 26px;
+    height: 26px;
+  }
+
+  .chronologie-contenu {
+    padding: 13px;
+  }
+
+  .chronologie-lignes > div {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .chronologie-lignes > div strong {
+    text-align: left;
+  }
+
+  .acomptes-modal-overlay {
+    align-items: flex-end;
+    padding: 0;
+  }
+
+  .acomptes-modal {
+    width: 100%;
+    max-height: 92vh;
+    overflow-y: auto;
+    border-radius: 18px 18px 0 0;
+    animation: modalSheetEnter 0.28s ease-out;
+  }
+
+  .acomptes-modal-header,
+  .acomptes-modal-body,
+  .acomptes-modal-footer {
+    padding-right: 16px;
+    padding-left: 16px;
+  }
+
+  .acomptes-modal-footer {
+    flex-direction: column-reverse;
+  }
+
+  .acomptes-modal-footer .btn {
+    width: 100%;
+  }
+}
+
+@keyframes modalSheetEnter {
+  from {
+    opacity: 0;
+    transform: translateY(24px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* ===== 13. Accessibilite et preference de mouvement ===== */
+.acomptes-page :focus-visible,
+.acomptes-modal :focus-visible {
+  outline: 3px solid rgba(16, 185, 129, 0.45);
+  outline-offset: 3px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .acomptes-page *,
+  .acomptes-page *::before,
+  .acomptes-page *::after,
+  .acomptes-modal,
+  .acomptes-modal-overlay {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* ============================================================
+   FIN DU BLOC DEDIE A LA PAGE ACOMPTES
    ============================================================ */

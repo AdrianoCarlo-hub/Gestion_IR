@@ -3,9 +3,11 @@ package mg.safidy.service;
 import mg.safidy.dto.DetailPenaliteDTO;
 import mg.safidy.dto.SituationPenalitesDTO;
 import mg.safidy.exception.BusinessException;
+import mg.safidy.model.Acompte;
 import mg.safidy.model.DeclarationIR;
 import mg.safidy.model.ParametreFiscal;
 import mg.safidy.model.Penalite;
+import mg.safidy.repository.AcompteRepository;
 import mg.safidy.repository.DeclarationIRRepository;
 import mg.safidy.repository.ParametreFiscalRepository;
 import mg.safidy.repository.PenaliteRepository;
@@ -37,13 +39,16 @@ public class PenaliteService {
     private final PenaliteRepository penaliteRepository;
     private final DeclarationIRRepository declarationRepository;
     private final ParametreFiscalRepository parametreRepository;
+    private final AcompteRepository acompteRepository;
 
     public PenaliteService(PenaliteRepository penaliteRepository,
                             DeclarationIRRepository declarationRepository,
-                            ParametreFiscalRepository parametreRepository) {
+                            ParametreFiscalRepository parametreRepository,
+                            AcompteRepository acompteRepository) {
         this.penaliteRepository = penaliteRepository;
         this.declarationRepository = declarationRepository;
         this.parametreRepository = parametreRepository;
+        this.acompteRepository = acompteRepository;
     }
 
     public List<Penalite> listerParDeclaration(Long idDeclaration) {
@@ -148,7 +153,7 @@ public class PenaliteService {
         BigDecimal tauxSuivant = getTaux("MAJORATION_MOIS_SUIV", new BigDecimal("1"));
         long plancher = getLong("MAJORATION_PLANCHER", 10_000L);
 
-        long mois = ChronoUnit.MONTHS.between(limite, datePaiement);
+        long mois = calculerMoisRetard(limite, datePaiement);
         if (mois < 1) mois = 1;
 
         BigDecimal tauxTotal = tauxPremier.add(tauxSuivant.multiply(BigDecimal.valueOf(mois - 1)));
@@ -178,6 +183,48 @@ public class PenaliteService {
     @Transactional
     public Penalite calculerInteretRetard(Long idDeclaration, LocalDate datePaiement) {
         return appliquerMajorationRetard(idDeclaration, datePaiement);
+    }
+
+    @Transactional
+    public Penalite calculerInteretRetardAcompte(Long idAcompte, LocalDate datePaiement) {
+        Acompte a = acompteRepository.findById(idAcompte)
+                .orElseThrow(() -> new BusinessException("Acompte introuvable"));
+
+        if (a.getDateEcheance() == null || datePaiement == null
+                || !datePaiement.isAfter(a.getDateEcheance())) {
+            return null;
+        }
+
+        long mois = calculerMoisRetard(a.getDateEcheance(), datePaiement);
+        if (mois <= 0) {
+            return null;
+        }
+
+        long interet = BigDecimal.valueOf(a.getMontantAr() == null ? 0L : a.getMontantAr())
+                .multiply(BigDecimal.valueOf(mois))
+                .divide(BigDecimal.valueOf(100), 0, RoundingMode.HALF_UP)
+                .longValue();
+
+        DeclarationIR declarationAssociee = a.getContribuable() != null && a.getContribuable().getIdContribuable() != null
+                ? declarationRepository.findByContribuableIdContribuableAndAnnee(
+                        a.getContribuable().getIdContribuable(), a.getAnnee())
+                        .orElse(null)
+                : null;
+
+        Penalite p = new Penalite();
+        p.setDeclaration(declarationAssociee);
+        p.setType("INTERET_RETARD_ACOMPTE");
+        p.setMotif("RETARD_PAIEMENT_ACOMPTE");
+        p.setBaseCalculAr(a.getMontantAr());
+        p.setNbMois((int) mois);
+        p.setTauxPct(new BigDecimal("1"));
+        p.setMontantAr(interet);
+        p.setStatut("DUE");
+        p.setDateLimite(a.getDateEcheance());
+        p.setDateRegularisation(datePaiement);
+        p.setArticleRef("CDI Art. 01.01.15");
+        p.setDateCreation(LocalDateTime.now());
+        return penaliteRepository.save(p);
     }
 
     // =====================================================
@@ -363,6 +410,16 @@ public class PenaliteService {
             }
         }
         return dto;
+    }
+
+    private long calculerMoisRetard(LocalDate dateEcheance, LocalDate datePaiement) {
+        if (dateEcheance == null || datePaiement == null || !datePaiement.isAfter(dateEcheance)) {
+            return 0L;
+        }
+        long mois = ChronoUnit.MONTHS.between(
+                dateEcheance.withDayOfMonth(1),
+                datePaiement.withDayOfMonth(1));
+        return Math.max(mois, 1L);
     }
 
     private DeclarationIR charger(Long idDeclaration) {
