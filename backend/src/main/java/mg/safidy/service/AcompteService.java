@@ -4,6 +4,7 @@ import mg.safidy.dto.SituationAcomptesDTO;
 import mg.safidy.exception.BusinessException;
 import mg.safidy.model.Acompte;
 import mg.safidy.model.Contribuable;
+import mg.safidy.model.DeclarationIR;
 import mg.safidy.model.ParametreFiscal;
 import mg.safidy.model.SecteurActivite;
 import mg.safidy.repository.AcompteRepository;
@@ -19,7 +20,9 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * Gestion des 3 types d'acomptes (CDI malgache) :
@@ -139,19 +142,27 @@ public class AcompteService {
      */
     @Transactional
     public List<Acompte> creerAcomptesProvisionnels(Long idContribuable, Integer annee, Long irN1) {
-        Contribuable c = contribuableRepository.findById(idContribuable)
-                .orElseThrow(() -> new BusinessException("Contribuable introuvable"));
-
-        if (irN1 == null || irN1 <= 0) {
-            throw new BusinessException("IR N-1 indisponible : aucun acompte provisionnel a generer");
+        if (annee == null || irN1 == null || irN1 <= 0) {
+            return List.of();
         }
+
+        Contribuable c = contribuableRepository.findById(idContribuable)
+            .orElseThrow(() -> new BusinessException("Contribuable introuvable"));
+
+        DeclarationIR declarationN1 = declarationRepository
+                .findByContribuableIdContribuableAndAnnee(idContribuable, annee - 1)
+                .filter(d -> !"BROUILLON".equals(d.getStatut()))
+                .orElse(null);
+        if (declarationN1 == null || declarationN1.getIrDu() == null || declarationN1.getIrDu() <= 0) {
+            return List.of();
+        }
+
+        // Utiliser l'IR total de la declaration N-1 comme source de reference, jamais son solde.
+        long irN1Total = declarationN1.getIrDu();
 
         BigDecimal taux = getTaux("TAUX_ACOMPTE", new BigDecimal("50"));
         int tauxInt = taux.intValue();
-        long montant = BigDecimal.valueOf(irN1)
-                .multiply(taux)
-                .divide(BigDecimal.valueOf(100), 0, RoundingMode.HALF_UP)
-                .longValue();
+        long montant = calculerMontantProvisionnel(irN1Total, taux);
 
         List<Acompte> crees = new ArrayList<>();
         for (int numero = 1; numero <= 2; numero++) {
@@ -170,7 +181,7 @@ public class AcompteService {
             a.setAnnee(annee);
             a.setNumero(num);
             a.setTauxPct(tauxInt);
-            a.setBaseIrN1(irN1);
+            a.setBaseIrN1(irN1Total);
             a.setMontantAr(montant);
             a.setDateEcheance(LocalDate.of(annee, numero == 1 ? 5 : 11, 15));
             a.setStatut("A_PAYER");
@@ -179,6 +190,93 @@ public class AcompteService {
             crees.add(acompteRepository.save(a));
         }
         return crees;
+    }
+
+    /**
+     * Resume les flux dus aux echeances du 15 mai et du 15 novembre.
+     * Le solde N-1 provient du calcul de la declaration (IR total - acomptes N-1 verses).
+     */
+    public Map<String, Object> calculerEcheances(Long idContribuable, Integer annee) {
+        if (annee == null || annee <= 0) {
+            Map<String, Object> resultat = new LinkedHashMap<>();
+            resultat.put("annee", annee);
+            resultat.put("eligible", false);
+            return resultat;
+        }
+
+        DeclarationIR declarationN1 = declarationRepository
+                .findByContribuableIdContribuableAndAnnee(idContribuable, annee - 1)
+                .filter(d -> !"BROUILLON".equals(d.getStatut()))
+                .orElse(null);
+        return construireEcheances(annee, declarationN1);
+    }
+
+    public List<Map<String, Object>> calculerChronologie(Long idContribuable) {
+        List<DeclarationIR> declarations = declarationRepository
+                .findByContribuableIdContribuableOrderByAnneeDesc(idContribuable).stream()
+                .filter(d -> d.getAnnee() != null && !"BROUILLON".equals(d.getStatut()))
+                .toList();
+        if (declarations.isEmpty()) {
+            return List.of();
+        }
+
+        Map<Integer, DeclarationIR> parAnnee = new LinkedHashMap<>();
+        declarations.forEach(d -> parAnnee.put(d.getAnnee(), d));
+        int premiereAnnee = declarations.stream().mapToInt(DeclarationIR::getAnnee).min().orElseThrow();
+        int derniereAnnee = declarations.stream().mapToInt(DeclarationIR::getAnnee).max().orElseThrow();
+
+        List<Map<String, Object>> chronologie = new ArrayList<>();
+        for (int annee = premiereAnnee; annee <= derniereAnnee + 1; annee++) {
+            DeclarationIR declarationN1 = parAnnee.get(annee - 1);
+            if (declarationN1 != null && (declarationN1.getIrDu() == null || declarationN1.getIrDu() <= 0)) {
+                declarationN1 = null;
+            }
+            chronologie.add(construireEcheances(annee, declarationN1));
+        }
+        return chronologie;
+    }
+
+    private Map<String, Object> construireEcheances(Integer annee, DeclarationIR declarationN1) {
+        Map<String, Object> resultat = new LinkedHashMap<>();
+        resultat.put("annee", annee);
+        resultat.put("eligible", false);
+        if (declarationN1 == null || declarationN1.getIrDu() == null || declarationN1.getIrDu() <= 0) {
+            resultat.put("message", "Aucun acompte provisionnel : aucun IR N-1 valide.");
+            return resultat;
+        }
+
+        long irN1 = declarationN1.getIrDu();
+        long acomptesN1Verses = declarationN1.getAcomptesVerses() == null
+                ? 0L : declarationN1.getAcomptesVerses();
+        long soldeN1 = Math.max(irN1 - acomptesN1Verses, 0L);
+        BigDecimal taux = getTaux("TAUX_ACOMPTE", new BigDecimal("50"));
+        long montantAcompte = calculerMontantProvisionnel(irN1, taux);
+
+        Map<String, Object> mai = new LinkedHashMap<>();
+        mai.put("date", LocalDate.of(annee, 5, 15));
+        mai.put("soldeN1", soldeN1);
+        mai.put("acompte1N", montantAcompte);
+        mai.put("total", soldeN1 + montantAcompte);
+
+        Map<String, Object> novembre = new LinkedHashMap<>();
+        novembre.put("date", LocalDate.of(annee, 11, 15));
+        novembre.put("acompte2N", montantAcompte);
+        novembre.put("total", montantAcompte);
+
+        resultat.put("eligible", true);
+        resultat.put("irN1Total", irN1);
+        resultat.put("acomptesN1Verses", acomptesN1Verses);
+        resultat.put("soldeN1", soldeN1);
+        resultat.put("echeance15Mai", mai);
+        resultat.put("echeance15Novembre", novembre);
+        return resultat;
+    }
+
+    private long calculerMontantProvisionnel(long irN1, BigDecimal taux) {
+        return BigDecimal.valueOf(irN1)
+                .multiply(taux)
+                .divide(BigDecimal.valueOf(100), 0, RoundingMode.HALF_UP)
+                .longValue();
     }
 
     // =====================================================

@@ -2462,6 +2462,9 @@ textarea.form-input {
 
 .acompte-line { display: flex; justify-content: space-between; font-size: 13px; color: #475569; }
 .acompte-line + .acompte-line { margin-top: 4px; }
+.acompte-echeances-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; margin-bottom: 16px; }
+.acompte-echeances-grid .acompte-card { border-top-color: var(--accent); }
+.acompte-line.acompte-total { border-top: 1px solid #d1fae5; margin-top: 10px; padding-top: 10px; color: var(--primary); font-weight: 700; }
 
 .acompte-card-actions { display: flex; gap: 8px; flex-wrap: wrap; }
 .acompte-card-actions .btn { padding: 8px 12px; font-size: 12px; }
@@ -2497,6 +2500,17 @@ textarea.form-input {
   flex-direction: column;
   gap: 12px;
 }
+
+.simulateur-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.simulateur-header .section-title { margin-bottom: 0; }
+.simulateur-modes { display: flex; gap: 8px; }
+.simulateur-modes .btn-secondary { margin-top: 0; padding: 8px 12px; font-size: 12px; }
+.simulateur-modes .btn-secondary.is-active { background: var(--primary); }
+.acompte-chronologie { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; }
+.acompte-chronologie-item { display: flex; flex-direction: column; gap: 6px; border: 1px solid #d1fae5; background: #f0fdf4; border-radius: 10px; padding: 14px; color: #334155; font-size: 13px; }
+.acompte-chronologie-item strong { color: var(--primary); font-size: 14px; }
+.acompte-chronologie-item b { border-top: 1px solid #d1fae5; margin-top: 4px; padding-top: 8px; color: #047857; }
+.acompte-chronologie-vide { grid-column: 1 / -1; color: var(--gray); font-size: 13px; padding: 8px 0; }
 
 .simulateur-resultats { display: flex; flex-direction: column; gap: 6px; margin-top: 4px; }
 .simulateur-ligne { display: flex; justify-content: space-between; font-size: 13px; padding: 6px 0; border-bottom: 1px dashed #eef2f3; }

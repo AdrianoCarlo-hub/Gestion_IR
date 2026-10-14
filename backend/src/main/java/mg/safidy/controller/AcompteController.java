@@ -68,6 +68,17 @@ public class AcompteController {
         return service.calculerSituationAcomptes(id, annee);
     }
 
+    @GetMapping("/echeances/{idContribuable}/{annee}")
+    public Map<String, Object> echeancesAnnee(@PathVariable Long idContribuable,
+                                               @PathVariable Integer annee) {
+        return service.calculerEcheances(idContribuable, annee);
+    }
+
+    @GetMapping("/echeances/chronologie/{idContribuable}")
+    public List<Map<String, Object>> chronologie(@PathVariable Long idContribuable) {
+        return service.calculerChronologie(idContribuable);
+    }
+
     @PostMapping("/douane")
     public Acompte enregistrerDouane(@RequestBody Map<String, Object> body) {
         Long idContribuable = Long.valueOf(body.get("idContribuable").toString());

@@ -22,6 +22,8 @@ export default function Acomptes() {
   const [selected, setSelected] = useState('');
   const [annee, setAnnee] = useState(anneeCourante);
   const [situation, setSituation] = useState(null);
+  const [echeances, setEcheances] = useState(null);
+  const [chronologie, setChronologie] = useState([]);
   const [loading, setLoading] = useState(false);
   const [douaneOuvert, setDouaneOuvert] = useState(false);
   const [confirm, setConfirm] = useState(null);
@@ -31,10 +33,20 @@ export default function Acomptes() {
   }, []);
 
   const charger = useCallback(async (id, an) => {
-    if (!id) { setSituation(null); return; }
+    if (!id) { setSituation(null); setEcheances(null); setChronologie([]); return; }
     setLoading(true);
     try {
       setSituation(await service.getSituation(id, an));
+      try {
+        setEcheances(await service.getEcheances(id, an));
+      } catch {
+        setEcheances(null);
+      }
+      try {
+        setChronologie(await service.getChronologie(id));
+      } catch {
+        setChronologie([]);
+      }
     } catch (e) {
       toast.error(e.response?.data?.message || 'Erreur de chargement');
       setSituation(null);
@@ -171,6 +183,50 @@ export default function Acomptes() {
           </div>
 
           <h3 className="section-title"><LuCalendar className="section-icon" /> Acomptes provisionnels</h3>
+          {echeances?.eligible && (
+            <div className="acompte-echeances-grid">
+              <div className="acompte-card">
+                <div className="acompte-card-head">
+                  <span className="acompte-card-title">
+                    <LuCalendar className="icon" /> Echeance du 15 mai {annee}
+                  </span>
+                  <span className="badge badge-info">SOLDE + ACOMPTE 1</span>
+                </div>
+                <div className="acompte-card-body">
+                  <div className="acompte-line">
+                    <span>Solde IR {annee - 1}</span>
+                    <strong>{fmt(echeances.echeance15Mai.soldeN1)} Ar</strong>
+                  </div>
+                  <div className="acompte-line">
+                    <span>Acompte 1 de {annee} (50 % IR {annee - 1})</span>
+                    <strong>{fmt(echeances.echeance15Mai.acompte1N)} Ar</strong>
+                  </div>
+                  <div className="acompte-line acompte-total">
+                    <span>Total a payer le 15 mai</span>
+                    <strong>{fmt(echeances.echeance15Mai.total)} Ar</strong>
+                  </div>
+                </div>
+              </div>
+              <div className="acompte-card">
+                <div className="acompte-card-head">
+                  <span className="acompte-card-title">
+                    <LuCalendar className="icon" /> Echeance du 15 novembre {annee}
+                  </span>
+                  <span className="badge badge-info">ACOMPTE 2</span>
+                </div>
+                <div className="acompte-card-body">
+                  <div className="acompte-line">
+                    <span>Acompte 2 de {annee} (50 % IR {annee - 1})</span>
+                    <strong>{fmt(echeances.echeance15Novembre.acompte2N)} Ar</strong>
+                  </div>
+                  <div className="acompte-line acompte-total">
+                    <span>Total a payer le 15 novembre</span>
+                    <strong>{fmt(echeances.echeance15Novembre.total)} Ar</strong>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
           {s.provisionnels.length === 0 ? (
             <div className="empty-state" style={{ padding: 24 }}>
               <p>Aucun acompte provisionnel pour cette annee</p>
@@ -226,7 +282,7 @@ export default function Acomptes() {
             )}
           </div>
 
-          <SimulateurLiquidation cumulAcomptes={s.cumulVerse} />
+          <SimulateurLiquidation cumulAcomptes={s.cumulVerse} chronologie={chronologie} />
         </>
       )}
 

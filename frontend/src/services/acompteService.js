@@ -22,6 +22,16 @@ export const getSituation = async (idContribuable, annee) => {
   return data;
 };
 
+export const getEcheances = async (idContribuable, annee) => {
+  const { data } = await api.get('/acomptes/echeances/' + idContribuable + '/' + annee);
+  return data;
+};
+
+export const getChronologie = async (idContribuable) => {
+  const { data } = await api.get('/acomptes/echeances/chronologie/' + idContribuable);
+  return data;
+};
+
 export const enregistrerDouane = async (payload) => {
   const { data } = await api.post('/acomptes/douane', payload);
   return data;
