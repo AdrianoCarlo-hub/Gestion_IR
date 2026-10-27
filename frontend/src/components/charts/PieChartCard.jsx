@@ -1,71 +1,47 @@
+import { Card, Typography } from 'antd';
 import {
-  PieChart as RechartsPieChart,
+  PieChart,
   Pie,
   Cell,
   Tooltip,
   Legend,
   ResponsiveContainer,
 } from 'recharts';
-import { LuChartPie } from "react-icons/lu";
 
-const COULEURS = [
-  '#1a5c4a', '#10b981', '#34d399', '#f59e0b',
-  '#dc2626', '#3b82f6', '#8b5cf6', '#ec4899',
-  '#14b8a6', '#f97316', '#a3a3a3',
-];
+const { Title } = Typography;
 
-export default function PieChartCard({ titre, data, cleNom, cleValeur }) {
+const PIE_COLORS = ['#0E7A55', '#16A34A', '#F59E0B', '#DC2626', '#0369A1', '#7C3AED', '#64748B'];
+
+/**
+ * Carte graphique en anneau.
+ * props : titre, data, cleNom, cleValeur
+ */
+export default function PieChartCard({ titre, data = [], cleNom = 'nom', cleValeur = 'valeur' }) {
   return (
-    <div className="chart-card">
-      <h3 className="chart-title">
-        <LuChartPie
-          style={{ width: 18, height: 18, verticalAlign: 'middle', marginRight: 8 }}
-        />
+    <Card>
+      <Title level={5} style={{ marginBottom: 16 }}>
         {titre}
-      </h3>
-      <div style={{ width: '100%', height: 320 }}>
+      </Title>
+      <div style={{ width: '100%', height: 280 }}>
         <ResponsiveContainer>
-          <RechartsPieChart>
+          <PieChart>
             <Pie
               data={data}
               dataKey={cleValeur}
               nameKey={cleNom}
-              cx="50%"
-              cy="50%"
-              outerRadius={100}
-              innerRadius={50}
+              innerRadius={58}
+              outerRadius={90}
               paddingAngle={2}
-              label={({ name, percent }) =>
-                percent > 0.05 ? `${name} (${(percent * 100).toFixed(0)}%)` : ''
-              }
-              labelLine={false}
-              fontSize={11}
-              animationDuration={500}
             >
               {data.map((entry, index) => (
-                <Cell key={index} fill={COULEURS[index % COULEURS.length]} />
+                <Cell key={index} fill={PIE_COLORS[index % PIE_COLORS.length]} />
               ))}
             </Pie>
-            <Tooltip
-              formatter={(value) => Number(value).toLocaleString('fr-FR') + ' Ar'}
-              contentStyle={{
-                borderRadius: 8,
-                border: '1px solid #e2e8f0',
-                boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
-                fontSize: 12,
-                background: '#ffffff',
-              }}
-              itemStyle={{ color: '#1e293b' }}
-            />
-            <Legend
-              wrapperStyle={{ fontSize: 12, paddingTop: 10 }}
-              align="center"
-              iconType="circle"
-              iconSize={10}
-            />
-          </RechartsPieChart>
+            <Tooltip formatter={(v) => Number(v).toLocaleString('fr-FR')} />
+            <Legend />
+          </PieChart>
         </ResponsiveContainer>
       </div>
-    </div>
+    </Card>
   );
 }

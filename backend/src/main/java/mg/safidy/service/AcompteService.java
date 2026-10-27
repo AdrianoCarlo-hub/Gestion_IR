@@ -71,7 +71,105 @@ public class AcompteService {
         }
         Acompte a = trouverParId(id);
         a.setStatut(statut);
+        if ("PAYE".equals(statut)) {
+            if (a.getDatePaiement() == null) {
+                a.setDatePaiement(LocalDate.now());
+            }
+        } else {
+            a.setDatePaiement(null);
+        }
         return acompteRepository.save(a);
+    }
+
+    /**
+     * Total des acomptes provisionnels verses pour une annee:
+     * c'est le montant retranche du solde total a payer de la declaration.
+     */
+    public long totalAcomptesVerses(Long idContribuable, Integer annee) {
+        if (idContribuable == null || annee == null) {
+            return 0L;
+        }
+        return acompteRepository
+                .findByContribuableIdContribuableAndAnneeAndTypeAcompte(
+                        idContribuable, annee, TYPE_PROVISIONNEL)
+                .stream()
+                .filter(a -> "PAYE".equals(a.getStatut()))
+                .mapToLong(a -> a.getMontantAr() == null ? 0L : a.getMontantAr())
+                .sum();
+    }
+
+    /**
+     * Situation par annee pour le tableau des acomptes :
+     * une ligne = une annee, avec la base (IR N-1), les 2 acomptes de 50 %,
+     * leurs dates de paiement et le statut global.
+     */
+    public List<Map<String, Object>> situationParAnnee(Long idContribuable) {
+        Contribuable c = contribuableRepository.findById(idContribuable)
+                .orElseThrow(() -> new BusinessException("Contribuable introuvable"));
+
+        List<DeclarationIR> declarations = declarationRepository
+                .findByContribuableIdContribuableOrderByAnneeDesc(idContribuable);
+
+        Map<Integer, List<Acompte>> acomptesParAnnee = new LinkedHashMap<>();
+        for (Acompte a : acompteRepository.findByContribuableIdContribuableOrderByAnneeAsc(idContribuable)) {
+            if (!TYPE_PROVISIONNEL.equals(a.getTypeAcompte())) continue;
+            acomptesParAnnee.computeIfAbsent(a.getAnnee(), k -> new ArrayList<>()).add(a);
+        }
+
+        List<Integer> annees = new ArrayList<>(acomptesParAnnee.keySet());
+        for (DeclarationIR d : declarations) {
+            if (d.getAnnee() != null && d.getIrDu() != null && d.getIrDu() > 0
+                    && !annees.contains(d.getAnnee() + 1)) {
+                annees.add(d.getAnnee() + 1);
+            }
+        }
+        annees.sort((x, y) -> Integer.compare(y, x));
+
+        List<Map<String, Object>> lignes = new ArrayList<>();
+        for (Integer annee : annees) {
+            Map<String, Object> ligne = new LinkedHashMap<>();
+            ligne.put("annee", annee);
+            ligne.put("idContribuable", c.getIdContribuable());
+
+            Long base = declarations.stream()
+                    .filter(d -> d.getAnnee() != null && d.getAnnee() == annee - 1)
+                    .filter(d -> d.getIrDu() != null)
+                    .map(DeclarationIR::getIrDu)
+                    .findFirst()
+                    .orElse(null);
+            if (base == null) {
+                base = acomptesParAnnee.getOrDefault(annee, List.of()).stream()
+                        .map(Acompte::getBaseIrN1)
+                        .filter(v -> v != null && v > 0)
+                        .findFirst()
+                        .orElse(0L);
+            }
+            ligne.put("baseIrN1", base);
+
+            Acompte a1 = acomptesParAnnee.getOrDefault(annee, List.of()).stream()
+                    .filter(a -> a.getNumero() != null && a.getNumero() == 1)
+                    .findFirst().orElse(null);
+            Acompte a2 = acomptesParAnnee.getOrDefault(annee, List.of()).stream()
+                    .filter(a -> a.getNumero() != null && a.getNumero() == 2)
+                    .findFirst().orElse(null);
+
+            ligne.put("acompte1", a1);
+            ligne.put("acompte2", a2);
+            ligne.put("montant1", a1 == null ? 0L : a1.getMontantAr());
+            ligne.put("montant2", a2 == null ? 0L : a2.getMontantAr());
+            ligne.put("date1", a1 == null ? null : a1.getDatePaiement());
+            ligne.put("date2", a2 == null ? null : a2.getDatePaiement());
+
+            boolean paye = a1 != null && "PAYE".equals(a1.getStatut())
+                    && (a2 == null || "PAYE".equals(a2.getStatut()));
+            boolean partiel = (a1 != null && "PAYE".equals(a1.getStatut()))
+                    || (a2 != null && "PAYE".equals(a2.getStatut()));
+            String statut = paye ? "PAYE" : (partiel ? "PARTIEL" : "EN_COURS");
+            if (a1 != null && "SUSPENDU".equals(a1.getStatut())) statut = "SUSPENDU";
+            ligne.put("statut", statut);
+            lignes.add(ligne);
+        }
+        return lignes;
     }
 
     // =====================================================
@@ -277,6 +375,14 @@ public class AcompteService {
                 .multiply(taux)
                 .divide(BigDecimal.valueOf(100), 0, RoundingMode.HALF_UP)
                 .longValue();
+    }
+
+    /**
+     * Montant d'un acompte provisionnel (50 % de l'IR de l'annee precedente).
+     */
+    public long montantAcompteProvisionnel(long irDu) {
+        BigDecimal taux = getTaux("TAUX_ACOMPTE", new BigDecimal("50"));
+        return calculerMontantProvisionnel(Math.max(irDu, 0L), taux);
     }
 
     // =====================================================

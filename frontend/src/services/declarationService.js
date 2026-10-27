@@ -60,3 +60,8 @@ export const marquerPayee = async (id) => {
   const { data } = await api.post('/declarations/' + id + '/marquer-payee');
   return data;
 };
+
+export const relancer = async (id) => {
+  const { data } = await api.post('/declarations/' + id + '/relancer');
+  return data;
+};

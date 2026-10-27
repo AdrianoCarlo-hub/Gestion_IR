@@ -1,6 +1,29 @@
-import { LuCalendarClock, LuCircleCheck, LuCircleDashed } from 'react-icons/lu';
+import { Timeline, Tag, Typography } from 'antd';
+import EmptyState from '../EmptyState';
+import { formatAr } from '../../utils/format';
 
-const fmt = (n) => (n == null ? '0' : Number(n).toLocaleString('fr-FR').replace(/\u202f|\u00a0/g, ' '));
+const { Text } = Typography;
+
+function ligneMontant(label, valeur, options = {}) {
+  const { total = false } = options;
+  return (
+    <div
+      style={{
+        display: 'flex',
+        justifyContent: 'space-between',
+        gap: 10,
+        padding: total ? '5px 8px' : '2px 0',
+        background: total ? '#eef4f2' : undefined,
+        borderRadius: total ? 6 : undefined,
+      }}
+    >
+      <Text type="secondary" style={total ? { color: '#0a2c22' } : undefined}>
+        {label}
+      </Text>
+      <Text strong>{formatAr(valeur)}</Text>
+    </div>
+  );
+}
 
 export default function ChronologiePaiements({
   anneeCreation,
@@ -13,74 +36,101 @@ export default function ChronologiePaiements({
   const anneesAffichees = new Set(periodes.map((periode) => periode.annee));
   const montrerCreation = anneeCreation && !anneesAffichees.has(anneeCreation);
 
-  return (
-    <div className="chronologie" aria-label="Chronologie des paiements">
-      {montrerCreation && (
-        <article className="chronologie-etape chronologie-etape--creation">
-          <span className="chronologie-point"><LuCircleDashed /></span>
-          <div className="chronologie-contenu">
-            <span className="chronologie-date">{anneeCreation}</span>
-            <h3>Annee de creation</h3>
-            <p>Aucun acompte provisionnel : pas d'IR N-1 de reference.</p>
-          </div>
-        </article>
-      )}
+  const items = [];
 
-      {periodes.length === 0 && !montrerCreation ? (
-        <div className="chronologie-vide">
-          <LuCalendarClock aria-hidden="true" />
-          <p>Aucune declaration validee disponible pour construire la chronologie.</p>
+  if (montrerCreation) {
+    items.push({
+      key: 'creation',
+      color: 'gray',
+      title: String(anneeCreation),
+      content: (
+        <div style={{ paddingBottom: 4 }}>
+          <Text strong>Annee de creation</Text>
+          <div style={{ fontSize: 13, color: '#6b7f7a' }}>
+            Aucun acompte provisionnel : pas d&apos;IR N-1 de reference.
+          </div>
         </div>
-      ) : (
-        periodes.map((periode) => {
-          const estAnneeCreation = anneeCreation && periode.annee === anneeCreation;
-          return (
-            <article className={'chronologie-etape' + (periode.annee === annee ? ' is-current' : '')}
-              key={periode.annee}>
-              <span className="chronologie-point">
-                {periode.eligible ? <LuCircleCheck /> : <LuCircleDashed />}
-              </span>
-              <div className="chronologie-contenu">
-                <span className="chronologie-date">Exercice {periode.annee}</span>
-                {estAnneeCreation || !periode.eligible ? (
-                  <>
-                    <h3>{estAnneeCreation ? 'Annee de creation' : "Pas d'acompte provisionnel"}</h3>
-                    <p>{periode.message || "Aucun IR N-1 valide : aucun acompte provisionnel n'est genere."}</p>
-                    {estAnneeCreation && irN1 > 0 && (
-                      <p className="chronologie-note">IR de reference enregistre : {fmt(irN1)} Ar</p>
-                    )}
-                  </>
-                ) : (
-                  <>
-                    <h3>Echeances {periode.annee}</h3>
-                    <div className="chronologie-lignes">
-                      <div>
-                        <span>15 mai — Solde IR {periode.annee - 1}</span>
-                        <strong>{fmt(periode.echeance15Mai.soldeN1)} Ar</strong>
-                      </div>
-                      <div>
-                        <span>Acompte 1 (50 % de l'IR N-1)</span>
-                        <strong>{fmt(periode.echeance15Mai.acompte1N)} Ar</strong>
-                      </div>
-                      <div className="chronologie-total">
-                        <span>Total du 15 mai</span>
-                        <strong>{fmt(periode.echeance15Mai.total)} Ar</strong>
-                      </div>
-                      <div>
-                        <span>15 novembre — Acompte 2</span>
-                        <strong>{fmt(periode.echeance15Novembre.acompte2N)} Ar</strong>
-                      </div>
-                    </div>
-                    {periode.annee === annee && acomptesVerses > 0 && (
-                      <p className="chronologie-note">Acomptes enregistres pour l'exercice : {fmt(acomptesVerses)} Ar</p>
-                    )}
-                  </>
-                )}
-              </div>
-            </article>
-          );
-        })
-      )}
-    </div>
-  );
+      ),
+    });
+  }
+
+  periodes.forEach((periode) => {
+    const estCreation = anneeCreation && periode.annee === anneeCreation;
+    const enCours = Number(periode.annee) === Number(annee);
+
+    const contenu = periode.eligible ? (
+      <div style={{ paddingBottom: 4 }}>
+        <div style={{ marginBottom: 6 }}>
+          <Text strong>Echeances {periode.annee}</Text>
+          {enCours && (
+            <Tag color="green" style={{ marginInlineStart: 8 }}>
+              Exercice en cours
+            </Tag>
+          )}
+        </div>
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(230px, 1fr))',
+            gap: '2px 20px',
+            fontSize: 13,
+          }}
+        >
+          {ligneMontant(
+            '15 mai - Solde IR ' + (periode.annee - 1),
+            periode.echeance15Mai?.soldeN1
+          )}
+          {ligneMontant('Acompte 1 (50 % de l IR N-1)', periode.echeance15Mai?.acompte1N)}
+          {ligneMontant('Total du 15 mai', periode.echeance15Mai?.total, { total: true })}
+          {ligneMontant(
+            '15 novembre - Acompte 2',
+            periode.echeance15Novembre?.acompte2N
+          )}
+        </div>
+        {enCours && acomptesVerses > 0 && (
+          <div style={{ marginTop: 8, fontSize: 12 }}>
+            <Text type="secondary">
+              Acomptes enregistres pour l&apos;exercice :{' '}
+              <Text strong>{formatAr(acomptesVerses)}</Text>
+            </Text>
+          </div>
+        )}
+      </div>
+    ) : (
+      <div style={{ paddingBottom: 4 }}>
+        <div style={{ marginBottom: 4 }}>
+          <Text strong>{estCreation ? 'Annee de creation' : "Pas d'acompte provisionnel"}</Text>
+        </div>
+        <div style={{ fontSize: 13, color: '#6b7f7a' }}>
+          {periode.message ||
+            "Aucun IR N-1 valide : aucun acompte provisionnel n'est genere."}
+        </div>
+        {estCreation && irN1 > 0 && (
+          <div style={{ marginTop: 4, fontSize: 12 }}>
+            <Text type="secondary">
+              IR de reference enregistre : <Text strong>{formatAr(irN1)}</Text>
+            </Text>
+          </div>
+        )}
+      </div>
+    );
+
+    items.push({
+      key: 'periode-' + periode.annee,
+      color: periode.eligible ? (enCours ? 'green' : 'blue') : 'gray',
+      title: `Exercice ${periode.annee}`,
+      content: contenu,
+    });
+  });
+
+  if (items.length === 0) {
+    return (
+      <EmptyState
+        titre="Aucune chronologie"
+        texte="Aucune declaration validee disponible pour construire la chronologie."
+      />
+    );
+  }
+
+  return <Timeline items={items} />;
 }

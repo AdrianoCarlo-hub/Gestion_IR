@@ -1,136 +1,56 @@
-import { createContext, useContext, useState, useCallback, useMemo, useEffect, useRef } from 'react';
-import { LuCircleCheck, LuCircleX, LuInfo, LuTriangleAlert, LuX } from "react-icons/lu";
+/* eslint-disable react-refresh/only-export-components */
+import { createContext, useContext, useMemo, useCallback } from 'react';
+import { App as AntApp } from 'antd';
+import { DUREE_TOAST_MS } from '../config/messageConfig';
 
 const ToastContext = createContext(null);
 
-let idCounter = 0;
-
-// Composant Toast individuel
-function ToastItem({ toast, onRemove, index }) {
-  const [exiting, setExiting] = useState(false);
-  const [timer, setTimer] = useState(null);
-
-  const handleRemove = useCallback(() => {
-    setExiting(true);
-    setTimeout(() => {
-      onRemove(toast.id);
-    }, 300); // Correspond a la duree de l'animation
-  }, [onRemove, toast.id]);
-
-  // Gestion du timer auto-dismiss
-  useEffect(() => {
-    if (toast.duree > 0 && !exiting) {
-      const t = setTimeout(() => {
-        handleRemove();
-      }, toast.duree);
-      setTimer(t);
-    }
-    return () => {
-      if (timer) clearTimeout(timer);
-    };
-  }, [toast.duree, exiting, handleRemove]);
-
-  // Pause au survol
-  const handleMouseEnter = useCallback(() => {
-    if (timer) {
-      clearTimeout(timer);
-      setTimer(null);
-    }
-  }, [timer]);
-
-  const handleMouseLeave = useCallback(() => {
-    if (toast.duree > 0 && !exiting) {
-      const t = setTimeout(() => {
-        handleRemove();
-      }, toast.duree);
-      setTimer(t);
-    }
-  }, [toast.duree, exiting, handleRemove]);
-
-  // Selection de l'icône selon le type
-  const getIcon = (type) => {
-    switch (type) {
-      case 'success':
-        return <LuCircleCheck className="icon" style={{ width: 16, height: 16 }} />;
-      case 'error':
-        return <LuCircleX className="icon" style={{ width: 16, height: 16 }} />;
-      case 'info':
-        return <LuInfo className="icon" style={{ width: 16, height: 16 }} />;
-      case 'warning':
-        return <LuTriangleAlert className="icon" style={{ width: 16, height: 16 }} />;
-      default:
-        return <LuInfo className="icon" style={{ width: 16, height: 16 }} />;
-    }
-  };
-
-  return (
-    <div
-      className={`toast ${toast.type} ${exiting ? 'toast-exit' : ''}`}
-      onClick={handleRemove}
-      onMouseEnter={handleMouseEnter}
-      onMouseLeave={handleMouseLeave}
-      style={{
-        animationDelay: `${index * 50}ms`,
-        zIndex: 10000 + index
-      }}
-    >
-      <div className="toast-icon">
-        {getIcon(toast.type)}
-      </div>
-      <div className="toast-message">{toast.message}</div>
-      <button
-        className="toast-close"
-        onClick={(e) => {
-          e.stopPropagation();
-          handleRemove();
-        }}
-        aria-label="Fermer"
-      >
-        <LuX className="icon" />
-      </button>
-    </div>
-  );
-}
-
+/**
+ * Toasts basees sur Ant Design (message).
+ * API : toast.success(msg, dureeMs?), toast.error(...), toast.info(...),
+ *       toast.warning(...), toast.push(type, msg, dureeMs?).
+ *
+ * Pieges antd v6 evites ici (source du bug "notifications persistantes") :
+ *  - le 2e argument positionnel de message.success(msg, X) est la DUREE,
+ *    pas un objet de configuration. Passer { duration: 5 } a cet endroit
+ *    fait retomber la duree a 0 => la notification ne se ferme JAMAIS.
+ *  - la duree est exprimee en SECONDES par antd, alors que l'API publique
+ *    de ce contexte reste en MILLISECONDES (coherent avec l'existant).
+ *  - pauseOnHover est desactive (voir config/messageConfig.js) pour qu'un
+ *    survol de la souris ne puisse pas figer une notification a l'ecran.
+ */
 export function ToastProvider({ children }) {
-  const [toasts, setToasts] = useState([]);
+  const { message } = AntApp.useApp();
 
-  const remove = useCallback((id) => {
-    setToasts((arr) => arr.filter((t) => t.id !== id));
-  }, []);
+  const push = useCallback(
+    (type, contenu, dureeMs = DUREE_TOAST_MS) => {
+      const ms = Number(dureeMs);
+      // Duree en secondes pour antd. Toujours > 0 : jamais de notification persistante.
+      const dureeSecondes = Number.isFinite(ms) && ms > 0 ? ms / 1000 : DUREE_TOAST_MS / 1000;
+      const typeValide = ['success', 'error', 'warning', 'info'].includes(type) ? type : 'info';
 
-  const push = useCallback((type, message, duree = 4000) => {
-    const id = ++idCounter;
-    setToasts((arr) => [...arr, { id, type, message, duree }]);
-    return id;
-  }, []);
+      // message.open() est la seule API acceptant un objet de configuration :
+      // la duree y est un nombre de secondes, donc le minuteur se lance.
+      message.open({
+        content: contenu,
+        type: typeValide,
+        duration: dureeSecondes,
+      });
+    },
+    [message]
+  );
 
-  const success = useCallback((msg, d = 3500) => push('success', msg, d), [push]);
-  const error = useCallback((msg, d = 6000) => push('error', msg, d), [push]);
-  const info = useCallback((msg, d = 4000) => push('info', msg, d), [push]);
-  const warning = useCallback((msg, d = 5000) => push('warning', msg, d), [push]);
+  const success = useCallback((msg, dureeMs) => push('success', msg, dureeMs), [push]);
+  const error = useCallback((msg, dureeMs) => push('error', msg, dureeMs), [push]);
+  const info = useCallback((msg, dureeMs) => push('info', msg, dureeMs), [push]);
+  const warning = useCallback((msg, dureeMs) => push('warning', msg, dureeMs), [push]);
 
-  // Memo pour la valeur du contexte
   const value = useMemo(
-    () => ({ toasts, push, success, error, info, warning, remove }),
-    [toasts, push, success, error, info, warning, remove]
+    () => ({ push, success, error, info, warning }),
+    [push, success, error, info, warning]
   );
 
-  return (
-    <ToastContext.Provider value={value}>
-      {children}
-      <div className="toast-container">
-        {toasts.map((t, index) => (
-          <ToastItem
-            key={t.id}
-            toast={t}
-            onRemove={remove}
-            index={index}
-          />
-        ))}
-      </div>
-    </ToastContext.Provider>
-  );
+  return <ToastContext.Provider value={value}>{children}</ToastContext.Provider>;
 }
 
 export function useToast() {

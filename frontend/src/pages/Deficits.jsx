@@ -1,263 +1,305 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import {
+  Button,
+  Card,
+  Col,
+  Descriptions,
+  Modal,
+  Row,
+  Select,
+  Statistic,
+  Table,
+  Tag,
+  Typography,
+} from 'antd';
+import {
+  CalendarOutlined,
+  DollarOutlined,
+  FallOutlined,
+  WarningOutlined,
+} from '@ant-design/icons';
 import { lister as listerContribuables } from '../services/contribuableService';
 import * as service from '../services/deficitService';
 import SearchBar from '../components/SearchBar';
 import ContribuableRecherche from '../components/ContribuableRecherche';
-import { SkeletonTable } from '../components/Spinner';
+import EmptyState from '../components/EmptyState';
+import { LoadingBlock } from '../components/Spinner';
 import { useToast } from '../context/ToastContext';
-import { LuPlus, LuTrendingDown, LuUser, LuCalendar, LuDollarSign, LuTriangleAlert, LuX, LuSave } from "react-icons/lu";
+import { formatAr } from '../utils/format';
 
-const fmt = (n) => (n == null ? '0' : Number(n).toLocaleString('fr-FR').replace(/\u202f|\u00a0/g, ' '));
-const anneeCourante = new Date().getFullYear();
+const { Text } = Typography;
+
+const STATUTS_DEFCIT = {
+  ACTIF: { couleur: 'green', libelle: 'Actif' },
+  EPUISE: { couleur: 'red', libelle: 'Epuise' },
+  EXPIRE: { couleur: 'default', libelle: 'Expire' },
+};
+
+const FILTRES_STATUT = [
+  { value: 'TOUS', label: 'Tous les statuts' },
+  { value: 'ACTIF', label: 'Actif' },
+  { value: 'EPUISE', label: 'Epuise' },
+  { value: 'EXPIRE', label: 'Expire' },
+];
 
 export default function Deficits() {
   const toast = useToast();
   const [liste, setListe] = useState([]);
-  const [listeFiltree, setListeFiltree] = useState([]);
   const [contribuables, setContribuables] = useState([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
-  const [success, setSuccess] = useState('');
-  const [showForm, setShowForm] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [recherche, setRecherche] = useState('');
-
-  const [form, setForm] = useState({
-    idContribuable: '',
-    anneeOrigine: anneeCourante,
-    montant: '',
-  });
-
-  const charger = async () => {
-    setLoading(true);
-    try {
-      const data = await service.lister();
-      setListe(data);
-      setListeFiltree(data);
-    } catch (e) {
-      setError(e.response?.data?.message || 'Erreur');
-    } finally {
-      setLoading(false);
-    }
-  };
+  const [filtreContribuable, setFiltreContribuable] = useState('');
+  const [filtreStatut, setFiltreStatut] = useState('TOUS');
+  const [detail, setDetail] = useState(null);
 
   useEffect(() => {
-    charger();
+    service
+      .lister()
+      .then(setListe)
+      .catch((e) => toast.error(e.response?.data?.message || 'Erreur de chargement'))
+      .finally(() => setLoading(false));
     listerContribuables().then(setContribuables).catch(() => {});
-  }, []);
+  }, [toast]);
 
-  useEffect(() => {
-    if (!recherche) {
-      setListeFiltree(liste);
-      return;
-    }
-    const r = recherche.toLowerCase();
-    setListeFiltree(
-      liste.filter((d) =>
+  const listeFiltree = useMemo(() => {
+    const r = recherche.trim().toLowerCase();
+    return liste.filter((d) => {
+      const idDeficitContribuable = d.idContribuable ?? d.contribuable?.idContribuable;
+      const okStatut = filtreStatut === 'TOUS' || (d.statut || '') === filtreStatut;
+      const okContribuable =
+        !filtreContribuable || String(idDeficitContribuable) === String(filtreContribuable);
+      const okRecherche =
+        !r ||
         (d.contribuable?.raisonSociale || '').toLowerCase().includes(r) ||
-        (d.contribuable?.nif || '').includes(r) ||
-        String(d.anneeOrigine).includes(r)
-      )
-    );
-  }, [recherche, liste]);
+        (d.contribuable?.nif || '').toLowerCase().includes(r) ||
+        String(d.anneeOrigine).includes(r);
+      return okStatut && okContribuable && okRecherche;
+    });
+  }, [liste, recherche, filtreContribuable, filtreStatut]);
 
-  const setF = (k, v) => setForm((f) => ({ ...f, [k]: v }));
+  const totalDisponible = liste.reduce((sum, d) => sum + (Number(d.solde) || 0), 0);
+  const montantInitial = liste.reduce((sum, d) => sum + (Number(d.montantInitial) || 0), 0);
+  const deficitsActifs = liste.filter((d) => d.statut === 'ACTIF').length;
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    setError('');
-    setSuccess('');
-    if (!form.idContribuable) {
-      setError('Contribuable obligatoire');
-      return;
-    }
-    if (!form.montant || Number(form.montant) <= 0) {
-      setError('Montant obligatoire et > 0');
-      return;
-    }
-    try {
-      await service.creer({
-        idContribuable: Number(form.idContribuable),
-        anneeOrigine: Number(form.anneeOrigine),
-        montant: Number(form.montant),
-      });
-      setSuccess('Deficit enregistre');
-      setShowForm(false);
-      setForm({ idContribuable: form.idContribuable, anneeOrigine: anneeCourante, montant: '' });
-      charger();
-    } catch (err) {
-      toast.error(err.response?.data?.message || 'Erreur');
-    }
+  const tagStatut = (statut) => {
+    const info = STATUTS_DEFCIT[statut] || { couleur: 'default', libelle: statut || '-' };
+    return <Tag color={info.couleur}>{info.libelle}</Tag>;
   };
 
-  const totalDeficit = liste.reduce((sum, d) => sum + (d.solde || 0), 0);
-  const deficitsActifs = liste.filter(d => d.statut === 'ACTIF').length;
+  const colonnes = [
+    {
+      title: 'Contribuable',
+      key: 'contribuable',
+      render: (_, d) => (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+          <Text strong>{d.contribuable?.raisonSociale || '-'}</Text>
+          <Text type="secondary" style={{ fontSize: 12 }}>
+            {d.contribuable?.nif || '-'}
+          </Text>
+        </div>
+      ),
+    },
+    { title: "Annee d'origine", dataIndex: 'anneeOrigine', key: 'anneeOrigine', width: 130 },
+    {
+      title: 'Montant initial',
+      dataIndex: 'montantInitial',
+      key: 'montantInitial',
+      align: 'right',
+      width: 150,
+      render: (v) => <span className="mono">{formatAr(v)}</span>,
+    },
+    {
+      title: 'Montant utilise',
+      dataIndex: 'montantUtilise',
+      key: 'montantUtilise',
+      align: 'right',
+      width: 150,
+      render: (v) => <span className="mono">{formatAr(v)}</span>,
+    },
+    {
+      title: 'Solde disponible',
+      dataIndex: 'solde',
+      key: 'solde',
+      align: 'right',
+      width: 160,
+      render: (v) => (
+        <Text strong className="mono" style={{ color: Number(v) > 0 ? '#0E7A55' : undefined }}>
+          {formatAr(v)}
+        </Text>
+      ),
+    },
+    {
+      title: "Annee d'expiration",
+      dataIndex: 'anneeExpiration',
+      key: 'anneeExpiration',
+      width: 140,
+      align: 'center',
+    },
+    {
+      title: 'Statut',
+      dataIndex: 'statut',
+      key: 'statut',
+      width: 110,
+      render: (statut) => tagStatut(statut),
+    },
+    {
+      title: '',
+      key: 'detail',
+      width: 90,
+      render: (_, d) => (
+        <Button type="link" size="small" onClick={() => setDetail(d)}>
+          Detail
+        </Button>
+      ),
+    },
+  ];
 
   return (
     <div className="page">
-      <header className="page-header">
+      <div className="page-header">
         <div>
-          <h1>Deficits</h1>
-          <p className="page-sub">Stock de deficits reportables (5 ans)</p>
-        </div>
-      </header>
-
-      {error && (
-        <div className="alert alert-error" style={{ marginBottom: 16 }}>
-          <span className="alert-icon">
-            <LuTriangleAlert className="icon" />
-          </span>
-          <span>{error}</span>
-        </div>
-      )}
-      {success && (
-        <div className="alert alert-success" style={{ marginBottom: 16 }}>
-          <span className="alert-icon">
-            <LuTriangleAlert className="icon" />
-          </span>
-          <span>{success}</span>
-        </div>
-      )}
-
-      <SearchBar
-        value={recherche}
-        onChange={setRecherche}
-        placeholder="Recherche (contribuable, annee)"
-      >
-        {!showForm && (
-          <button className="btn-primary" onClick={() => setShowForm(true)}>
-            + Nouveau deficit
-          </button>
-        )}
-      </SearchBar>
-
-      <div className="cards-grid" style={{ marginBottom: 24 }}>
-        <div className="stat-card">
-          <div className="stat-card-header">
-            <div className="stat-card-icon">
-              <LuTrendingDown className="icon" style={{ width: 20, height: 20 }} />
-            </div>
-          </div>
-          <span className="stat-label">Deficits actifs</span>
-          <span className="stat-value">{deficitsActifs}</span>
-        </div>
-
-        <div className="stat-card financial ir-du">
-          <div className="stat-card-header">
-            <div className="stat-card-icon orange">
-              <LuDollarSign className="icon" style={{ width: 20, height: 20 }} />
-            </div>
-          </div>
-          <span className="stat-label">Montant total</span>
-          <span className="stat-value">{fmt(totalDeficit)} Ar</span>
-        </div>
-
-        <div className="stat-card financial encaisse">
-          <div className="stat-card-header">
-            <div className="stat-card-icon blue">
-              <LuCalendar className="icon" style={{ width: 20, height: 20 }} />
-            </div>
-          </div>
-          <span className="stat-label">Total deficits</span>
-          <span className="stat-value">{liste.length}</span>
+          <h1 className="page-title">Deficits</h1>
+          <p className="page-subtitle">
+            Stock de deficits reportables (5 ans) - mis a jour automatiquement
+          </p>
         </div>
       </div>
 
-      {showForm && (
-        <form className="form-panel" onSubmit={handleSubmit} style={{ marginBottom: 16 }}>
-          <h3 className="section-title">
-            <LuTrendingDown className="section-icon" />
-            Nouveau deficit
-          </h3>
-          <div className="form-row">
-            <div className="form-group" style={{ flex: 2 }}>
-              <label className="form-label required">Contribuable *</label>
-              <ContribuableRecherche
-                contribuables={contribuables}
-                value={form.idContribuable}
-                onChange={(id) => setF('idContribuable', id)}
-              />
-            </div>
-            <div className="form-group">
-              <label className="form-label required">Annee d'origine *</label>
-              <input 
-                type="number" 
-                className="form-input" 
-                value={form.anneeOrigine}
-                onChange={(e) => setF('anneeOrigine', e.target.value)} 
-                min={2000} 
-                required 
-              />
-            </div>
-            <div className="form-group">
-              <label className="form-label required">Montant (Ar) *</label>
-              <input 
-                type="number" 
-                className="form-input" 
-                value={form.montant}
-                onChange={(e) => setF('montant', e.target.value)} 
-                min={1} 
-                required 
-              />
-            </div>
-          </div>
-          <div className="form-actions">
-            <button type="submit" className="btn btn-primary">
-              <LuSave className="icon" />
-              Enregistrer
-            </button>
-            <button type="button" className="btn btn-secondary" onClick={() => setShowForm(false)}>
-              <LuX className="icon" />
-              Annuler
-            </button>
-          </div>
-        </form>
-      )}
+      <Row gutter={[16, 16]}>
+        <Col xs={12} md={6}>
+          <Card>
+            <Statistic
+              title="Deficits actifs"
+              value={deficitsActifs}
+              prefix={<FallOutlined style={{ color: '#0E7A55' }} />}
+            />
+          </Card>
+        </Col>
+        <Col xs={12} md={6}>
+          <Card>
+            <Statistic
+              title="Total disponible"
+              value={totalDisponible}
+              precision={0}
+              suffix="Ar"
+              prefix={<DollarOutlined style={{ color: '#16A34A' }} />}
+              valueStyle={{ color: '#16A34A' }}
+            />
+          </Card>
+        </Col>
+        <Col xs={12} md={6}>
+          <Card>
+            <Statistic
+              title="Montant initial"
+              value={montantInitial}
+              precision={0}
+              suffix="Ar"
+              prefix={<WarningOutlined style={{ color: '#EA580C' }} />}
+            />
+          </Card>
+        </Col>
+        <Col xs={12} md={6}>
+          <Card>
+            <Statistic
+              title="Total deficits"
+              value={liste.length}
+              prefix={<CalendarOutlined style={{ color: '#0369A1' }} />}
+            />
+          </Card>
+        </Col>
+      </Row>
+
+      <div className="toolbar">
+        <SearchBar
+          value={recherche}
+          onChange={setRecherche}
+          placeholder="Recherche (contribuable, NIF, annee)"
+        >
+          <Select
+            value={filtreStatut}
+            onChange={setFiltreStatut}
+            style={{ width: 170 }}
+            options={FILTRES_STATUT}
+            aria-label="Filtrer par statut"
+          />
+        </SearchBar>
+        <div style={{ flex: 1, minWidth: 260, maxWidth: 520 }}>
+          <ContribuableRecherche
+            contribuables={contribuables}
+            value={filtreContribuable}
+            onChange={(id) => setFiltreContribuable(id || '')}
+            placeholder="Filtrer par contribuable..."
+          />
+        </div>
+      </div>
 
       {loading ? (
-        <SkeletonTable rows={5} cols={7} />
-      ) : listeFiltree.length === 0 ? (
-        <div className="empty-state">
-          <div className="empty-state-icon">
-            <LuTrendingDown className="icon" />
-          </div>
-          <h3>Aucun deficit</h3>
-          <p>Ajoutez un deficit pour le report sur les declarations futures</p>
-        </div>
+        <LoadingBlock message="Chargement des deficits..." />
       ) : (
-        <div className="table-container">
-          <table className="data-table">
-            <thead>
-              <tr>
-                <th>Contribuable</th>
-                <th>Annee origine</th>
-                <th>Montant initial</th>
-                <th>Utilise</th>
-                <th>Solde</th>
-                <th>Expiration</th>
-                <th>Statut</th>
-              </tr>
-            </thead>
-            <tbody>
-              {listeFiltree.map((d) => (
-                <tr key={d.idDeficit}>
-                  <td>{d.contribuable?.raisonSociale || '-'}</td>
-                  <td>{d.anneeOrigine}</td>
-                  <td>{fmt(d.montantInitial)} Ar</td>
-                  <td>{fmt(d.montantUtilise)} Ar</td>
-                  <td><strong>{fmt(d.solde)} Ar</strong></td>
-                  <td>{d.anneeExpiration}</td>
-                  <td>
-                    <span className={'badge badge-' + (d.statut || '').toLowerCase()}>
-                      {d.statut}
-                    </span>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <Table
+          rowKey="idDeficit"
+          size="small"
+          columns={colonnes}
+          dataSource={listeFiltree}
+          scroll={{ x: 980 }}
+          pagination={{
+            pageSize: 12,
+            showSizeChanger: true,
+            showTotal: (total) => `${total} resultat(s)`,
+          }}
+          locale={{
+            emptyText: (
+              <EmptyState
+                titre="Aucun deficit"
+                texte="Les deficits sont crees automatiquement lors des declarations deficitaires"
+              />
+            ),
+          }}
+        />
       )}
-      <p className="table-footer">{listeFiltree.length} resultat(s)</p>
+
+      <Text type="secondary" style={{ fontSize: 12 }}>
+        {listeFiltree.length} resultat(s)
+      </Text>
+
+      <Modal
+        open={!!detail}
+        title="Detail du deficit"
+        footer={null}
+        onCancel={() => setDetail(null)}
+        destroyOnHidden
+        centered
+        width={520}
+      >
+        {detail && (
+          <Descriptions
+            column={1}
+            size="small"
+            items={[
+              { key: 'nif', label: 'NIF', children: detail.contribuable?.nif || '-' },
+              {
+                key: 'rs',
+                label: 'Raison sociale',
+                children: detail.contribuable?.raisonSociale || '-',
+              },
+              { key: 'origine', label: "Annee d'origine", children: detail.anneeOrigine },
+              { key: 'initial', label: 'Montant initial', children: formatAr(detail.montantInitial) },
+              { key: 'utilise', label: 'Montant utilise', children: formatAr(detail.montantUtilise) },
+              {
+                key: 'solde',
+                label: 'Solde disponible',
+                children: <Text strong>{formatAr(detail.solde)}</Text>,
+              },
+              {
+                key: 'expiration',
+                label: "Annee d'expiration",
+                children: detail.anneeExpiration,
+              },
+              { key: 'statut', label: 'Statut', children: tagStatut(detail.statut) },
+            ]}
+          />
+        )}
+      </Modal>
     </div>
   );
 }

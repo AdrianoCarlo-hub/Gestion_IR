@@ -87,13 +87,13 @@ public class PenaliteService {
             montant = getLong("AMENDE_DEPOT_CA_400M", 200_000L);
             article = "CDI art. 05.01.05";
         } else if (ca >= CA_200M) {
-            montant = getLong("AMENDE_DEPOT_CA_200M", 100_000L);
+            montant = getLong("AMENDE_DEPOT_CA_200M", 150_000L);
             article = "CDI art. 05.01.05";
         } else if (ca >= CA_50M) {
-            montant = getLong("AMENDE_DEPOT_CA_50M", 50_000L);
+            montant = getLong("AMENDE_DEPOT_CA_50M", 120_000L);
             article = "CDI art. 05.01.05";
         } else {
-            montant = getLong("AMENDE_DEPOT_CA_INF", 20_000L);
+            montant = getLong("AMENDE_DEPOT_CA_INF", 100_000L);
             article = "CDI art. 05.01.05";
         }
 
@@ -117,6 +117,96 @@ public class PenaliteService {
     @Transactional
     public Penalite calculerAmendeDepotTardif(Long idDeclaration, LocalDate dateDepot) {
         return appliquerAmendeDepotTardif(idDeclaration, dateDepot);
+    }
+
+    // =====================================================
+    // Type A2 - INTERETS DE RETARD SUR L'IR (1 % / mois commence)
+    // Genere automatiquement avec l'amende de depot tardif.
+    // =====================================================
+
+    /**
+     * Interets de retard sur l'IR du, dus quand la declaration est deposee
+     * apres le 15 mai de l'annee N+1.
+     * Base = IR du ; taux = TAUX_INTERET_RETARD (1 %) ; mois = mois entiers
+     * commences entre la date limite et la date de depot.
+     * Idempotent : un seul INTERET_RETARD par declaration.
+     */
+    @Transactional
+    public Penalite appliquerInteretsRetard(Long idDeclaration, LocalDate dateDepot) {
+        DeclarationIR d = charger(idDeclaration);
+
+        LocalDate limite = d.getDateLimite() != null
+                ? d.getDateLimite()
+                : LocalDate.of(d.getAnnee() + 1, 5, 15);
+
+        if (dateDepot == null || !dateDepot.isAfter(limite)) {
+            throw new BusinessException("Aucun retard de depot a penaliser");
+        }
+
+        List<Penalite> existantes = penaliteRepository.findByDeclarationIdDeclaration(idDeclaration);
+        for (Penalite p : existantes) {
+            if ("INTERET_RETARD".equals(p.getType()) && !"ANNULEE".equals(p.getStatut())) {
+                return p;
+            }
+        }
+
+        long base = d.getIrDu() == null ? 0L : d.getIrDu();
+        if (base <= 0) {
+            throw new BusinessException("Aucun IR du a majorer");
+        }
+
+        long mois = calculerMoisRetard(limite, dateDepot);
+        if (mois < 1) mois = 1;
+
+        BigDecimal taux = getTaux("TAUX_INTERET_RETARD", new BigDecimal("1"));
+        long montant = BigDecimal.valueOf(base)
+                .multiply(taux)
+                .multiply(BigDecimal.valueOf(mois))
+                .divide(BigDecimal.valueOf(100), 0, RoundingMode.HALF_UP)
+                .longValue();
+
+        Penalite p = new Penalite();
+        p.setDeclaration(d);
+        p.setType("INTERET_RETARD");
+        p.setMotif("RETARD_DEPOT_IR");
+        p.setNbMois((int) mois);
+        p.setTauxPct(taux);
+        p.setBaseCalculAr(base);
+        p.setMontantAr(montant);
+        p.setArticleRef("CDI art. 05.01.05");
+        p.setDateLimite(limite);
+        p.setDateRegularisation(dateDepot);
+        p.setStatut("DUE");
+        p.setDateCreation(LocalDateTime.now());
+        return penaliteRepository.save(p);
+    }
+
+    /**
+     * Total des penalites encore dues (statut DUE) pour une declaration.
+     * C'est ce montant qui est ajoute au solde total a payer ET reintegre
+     * dans la base imposable.
+     */
+    public long totalDues(Long idDeclaration) {
+        if (idDeclaration == null) return 0L;
+        return penaliteRepository.findByDeclarationIdDeclaration(idDeclaration).stream()
+                .filter(p -> "DUE".equals(p.getStatut()))
+                .mapToLong(p -> p.getMontantAr() == null ? 0L : p.getMontantAr())
+                .sum();
+    }
+
+    /**
+     * Passe toutes les penalites DUE d'une declaration en PAYEE.
+     */
+    @Transactional
+    public int marquerPayees(Long idDeclaration) {
+        int n = 0;
+        for (Penalite p : penaliteRepository.findByDeclarationIdDeclarationAndStatut(idDeclaration, "DUE")) {
+            p.setStatut("PAYEE");
+            p.setDateRegularisation(LocalDate.now());
+            penaliteRepository.save(p);
+            n++;
+        }
+        return n;
     }
 
     // =====================================================
@@ -205,11 +295,31 @@ public class PenaliteService {
                 .divide(BigDecimal.valueOf(100), 0, RoundingMode.HALF_UP)
                 .longValue();
 
-        DeclarationIR declarationAssociee = a.getContribuable() != null && a.getContribuable().getIdContribuable() != null
-                ? declarationRepository.findByContribuableIdContribuableAndAnnee(
-                        a.getContribuable().getIdContribuable(), a.getAnnee())
-                        .orElse(null)
-                : null;
+        DeclarationIR declarationAssociee = null;
+        if (a.getContribuable() != null && a.getContribuable().getIdContribuable() != null) {
+            Long idContribuable = a.getContribuable().getIdContribuable();
+            // La penalite est rattachee a l'annee de l'acompte, sinon a l'annee
+            // precedente (la declaration de l'annee N+1 n'existe pas encore).
+            declarationAssociee = declarationRepository
+                    .findByContribuableIdContribuableAndAnnee(idContribuable, a.getAnnee())
+                    .or(() -> declarationRepository
+                            .findByContribuableIdContribuableAndAnnee(idContribuable, a.getAnnee() - 1))
+                    .orElse(null);
+        }
+        if (declarationAssociee == null) {
+            // id_declaration est NOT NULL : sans declaration cible, aucune penalite.
+            return null;
+        }
+
+        // Idempotent : un seul interet de retard par echeance d'acompte.
+        for (Penalite existante : penaliteRepository
+                .findByDeclarationIdDeclaration(declarationAssociee.getIdDeclaration())) {
+            if ("INTERET_RETARD_ACOMPTE".equals(existante.getType())
+                    && a.getDateEcheance().equals(existante.getDateLimite())
+                    && !"ANNULEE".equals(existante.getStatut())) {
+                return existante;
+            }
+        }
 
         Penalite p = new Penalite();
         p.setDeclaration(declarationAssociee);

@@ -1,4 +1,13 @@
 import { useEffect, useState, useCallback } from 'react';
+import { Card, Row, Col, Button, Modal, Form, Input, Select, Tabs } from 'antd';
+import {
+  PauseCircleOutlined,
+  PlayCircleOutlined,
+  FileTextOutlined,
+  HistoryOutlined,
+  CalculatorOutlined,
+  SafetyCertificateOutlined,
+} from '@ant-design/icons';
 import { useAuth } from '../context/AuthContext';
 import { lister as listerContribuables } from '../services/contribuableService';
 import * as service from '../services/suspensionService';
@@ -7,14 +16,10 @@ import ConfirmDialog from '../components/ConfirmDialog';
 import StatutBanner from '../components/suspensions/StatutBanner';
 import DeclarationForm from '../components/suspensions/DeclarationForm';
 import HistoriqueTimeline from '../components/suspensions/HistoriqueTimeline';
+import ImpactFiscalPanel from '../components/suspensions/ImpactFiscalPanel';
 import { LoadingBlock } from '../components/Spinner';
+import EmptyState from '../components/EmptyState';
 import { useToast } from '../context/ToastContext';
-import {
-  LuBadgeCheck,
-  LuActivity,
-  LuCirclePause,
-  LuCirclePlay,
-} from 'react-icons/lu';
 
 const today = () => {
   const date = new Date();
@@ -52,6 +57,7 @@ export default function Suspensions() {
   const [contribuables, setContribuables] = useState([]);
   const [selected, setSelected] = useState('');
   const [situation, setSituation] = useState(null);
+  const [impact, setImpact] = useState(null);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
@@ -59,10 +65,19 @@ export default function Suspensions() {
   }, []);
 
   const charger = useCallback(async (id) => {
-    if (!id) { setSituation(null); return; }
+    if (!id) {
+      setSituation(null);
+      setImpact(null);
+      return;
+    }
     setLoading(true);
     try {
-      setSituation(await service.situation(id));
+      const [sit, imp] = await Promise.all([
+        service.situation(id),
+        service.simuler(id).catch(() => null),
+      ]);
+      setSituation(sit);
+      setImpact(imp);
     } catch (e) {
       toast.error(e.response?.data?.message || 'Erreur de chargement');
     } finally {
@@ -71,7 +86,10 @@ export default function Suspensions() {
   }, [toast]);
 
   useEffect(() => {
-    if (selected) charger(selected);
+    if (selected) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      charger(selected);
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selected]);
 
@@ -92,17 +110,16 @@ export default function Suspensions() {
     });
   };
 
-  const soumettreChangementStatut = async (e) => {
-    e.preventDefault();
+  const soumettreChangementStatut = async (values) => {
     if (!statusDialog) return;
     try {
       await service.changerStatut(Number(selected), statusDialog.statut, idAgent, {
         dateArret: statusDialog.statut === 'SUSPENDU'
-          ? statusDialog.date
-          : !evenementEnCours ? statusDialog.dateArret : undefined,
+          ? values.date
+          : !evenementEnCours ? values.dateArret : undefined,
         motif: statusDialog.statut === 'SUSPENDU' || !evenementEnCours
-          ? statusDialog.motif : undefined,
-        dateReprise: statusDialog.statut === 'ACTIF' ? statusDialog.date : undefined,
+          ? values.motif : undefined,
+        dateReprise: statusDialog.statut === 'ACTIF' ? values.date : undefined,
       });
       setStatusDialog(null);
       await charger(selected);
@@ -158,69 +175,100 @@ export default function Suspensions() {
     });
   };
 
+  const onglets = [
+    {
+      key: 'declaration',
+      label: 'Declaration',
+      icon: <FileTextOutlined />,
+      disabled: statutActuel === 'SUSPENDU' && !enCours,
+      children: (
+        <DeclarationForm onSoumettre={soumettre} enCours={enCours} enCoursId={enCours} />
+      ),
+    },
+    {
+      key: 'historique',
+      label: 'Historique',
+      icon: <HistoryOutlined />,
+      children: (
+        <>
+          <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap' }}>
+            {enCours && situation?.typeEvenementEnCours === 'VEILLEUSE' && (
+              <Button onClick={() => annuler(enCours)}>Annuler l arret en cours</Button>
+            )}
+            {enCours && situation?.typeEvenementEnCours === 'CESSATION' && (
+              <Button
+                type="primary"
+                icon={<SafetyCertificateOutlined />}
+                onClick={attestation}
+              >
+                Attestation de radiation
+              </Button>
+            )}
+          </div>
+          <HistoriqueTimeline historique={situation?.historique || []} />
+        </>
+      ),
+    },
+    {
+      key: 'impact',
+      label: 'Impact fiscal',
+      icon: <CalculatorOutlined />,
+      children: <ImpactFiscalPanel impact={impact} />,
+    },
+  ];
+
   return (
     <div className="page">
-      <header className="page-header">
+      <div className="page-header">
         <div>
-          <h1>Arret / reprise d activite</h1>
-          <p className="page-sub">Veilleuse, cessation definitive et reprise</p>
+          <h1 className="page-title">Arret / reprise d activite</h1>
+          <p className="page-subtitle">Veilleuse, cessation definitive et reprise</p>
         </div>
-      </header>
-
-      <div className="form-panel" style={{ marginBottom: 16 }}>
-        <label className="form-label">Contribuable</label>
-        <ContribuableRecherche contribuables={contribuables}
-          value={selected} onChange={(id) => setSelected(id)} />
       </div>
 
+      <Card size="small" style={{ marginBottom: 16 }}>
+        <ContribuableRecherche
+          contribuables={contribuables}
+          value={selected}
+          onChange={(id) => setSelected(id)}
+        />
+      </Card>
+
       {!selected ? (
-        <div className="empty-state">
-          <div className="empty-state-icon"><LuActivity className="icon" /></div>
-          <h3>Selectionnez un contribuable</h3>
-          <p>Choisissez un contribuable pour gerer son activite</p>
-        </div>
+        <EmptyState
+          titre="Selectionnez un contribuable"
+          texte="Choisissez un contribuable pour gerer son activite"
+        />
       ) : loading ? (
         <LoadingBlock message="Chargement..." />
       ) : (
         <>
-          <div className="section-head" style={{ marginBottom: 16 }}>
-            <div style={{ flex: '1 1 320px' }}>
+          <Row gutter={[16, 16]} align="middle" style={{ marginBottom: 16 }}>
+            <Col xs={24} md={18}>
               <StatutBanner statut={statutActuel} moisActifs={situation?.moisActifs} />
-            </div>
+            </Col>
             {(statutActuel === 'ACTIF' || statutActuel === 'SUSPENDU') && (
-              <button
-                className={statutActuel === 'ACTIF' ? 'btn btn-secondary' : 'btn btn-primary'}
-                onClick={demanderChangementStatut}
-                type="button"
-              >
-                {statutActuel === 'ACTIF'
-                  ? <><LuCirclePause className="icon" /> Suspendre</>
-                  : <><LuCirclePlay className="icon" /> Reactiver</>}
-              </button>
+              <Col xs={24} md={6} style={{ textAlign: 'right' }}>
+                <Button
+                  type={statutActuel === 'ACTIF' ? 'default' : 'primary'}
+                  icon={
+                    statutActuel === 'ACTIF' ? (
+                      <PauseCircleOutlined />
+                    ) : (
+                      <PlayCircleOutlined />
+                    )
+                  }
+                  onClick={demanderChangementStatut}
+                >
+                  {statutActuel === 'ACTIF' ? 'Suspendre' : 'Reactiver'}
+                </Button>
+              </Col>
             )}
-          </div>
+          </Row>
 
-          {(statutActuel !== 'SUSPENDU' || enCours) && (
-            <DeclarationForm onSoumettre={soumettre} enCours={enCours} enCoursId={enCours} />
-          )}
-
-          <div className="section-head">
-            <h3 className="section-title">Historique</h3>
-            <div className="row-actions">
-              {enCours && situation?.typeEvenementEnCours === 'VEILLEUSE' && (
-                <button className="btn btn-secondary" onClick={() => annuler(enCours)}>
-                  Annuler l arret en cours
-                </button>
-              )}
-              {enCours && situation?.typeEvenementEnCours === 'CESSATION' && (
-                <button className="btn btn-validate" onClick={attestation}>
-                  <LuBadgeCheck className="icon" /> Attestation de radiation
-                </button>
-              )}
-            </div>
-          </div>
-
-          <HistoriqueTimeline historique={situation?.historique || []} />
+          <Card>
+            <Tabs defaultActiveKey="declaration" items={onglets} />
+          </Card>
         </>
       )}
 
@@ -235,85 +283,92 @@ export default function Suspensions() {
       />
 
       {statusDialog && (
-        <div className="modal-overlay" onClick={() => setStatusDialog(null)}>
-          <form
-            className="modal-box"
-            onSubmit={soumettreChangementStatut}
-            onClick={(e) => e.stopPropagation()}
+        <Modal
+          open
+          title={
+            statusDialog.statut === 'SUSPENDU'
+              ? 'Suspendre l activite'
+              : "Reprise d'activite"
+          }
+          onCancel={() => setStatusDialog(null)}
+          destroyOnHidden
+          centered
+          width={520}
+          footer={[
+            <Button key="annuler" onClick={() => setStatusDialog(null)}>
+              Annuler
+            </Button>,
+            <Button
+              key="confirmer"
+              type="primary"
+              htmlType="submit"
+              form="form-changement-statut"
+            >
+              {statusDialog.statut === 'SUSPENDU'
+                ? 'Confirmer la suspension'
+                : 'Confirmer la reprise'}
+            </Button>,
+          ]}
+        >
+          <Form
+            id="form-changement-statut"
+            layout="vertical"
+            initialValues={{
+              date: statusDialog.date,
+              motif: statusDialog.motif,
+              dateArret: statusDialog.dateArret,
+            }}
+            onValuesChange={(changed) =>
+              setStatusDialog((current) => ({ ...current, ...changed }))
+            }
+            onFinish={soumettreChangementStatut}
           >
-            <div className="modal-header">
-              <h3>{statusDialog.statut === 'SUSPENDU' ? "Suspendre l'activite" : "Reprise d'activite"}</h3>
-            </div>
-            <div className="modal-body">
-              <div className="form-group">
-                <label className="form-label required">
-                  {statusDialog.statut === 'SUSPENDU' ? "Date d'arret" : 'Date de reprise'}
-                </label>
-                <input
-                  className="form-input"
-                  type="date"
-                  value={statusDialog.date}
-                  min={statusDialog.statut === 'ACTIF'
-                    ? lendemain(evenementEnCours?.dateArret || statusDialog.dateArret) : undefined}
-                  max={today()}
-                  required
-                  onChange={(e) => setStatusDialog((current) => ({ ...current, date: e.target.value }))}
-                />
-              </div>
-              {statusDialog.statut === 'SUSPENDU' && (
-                <div className="form-group" style={{ marginTop: 14 }}>
-                  <label className="form-label required">Motif de suspension</label>
-                  <select
-                    className="form-input"
-                    value={statusDialog.motif}
-                    required
-                    onChange={(e) => setStatusDialog((current) => ({ ...current, motif: e.target.value }))}
-                  >
-                    {MOTIFS_ARRET.map((motif) => (
-                      <option key={motif.value} value={motif.value}>{motif.label}</option>
-                    ))}
-                  </select>
-                </div>
-              )}
-              {statusDialog.statut === 'ACTIF' && !evenementEnCours && (
-                <>
-                  <div className="form-group" style={{ marginTop: 14 }}>
-                    <label className="form-label required">Date de suspension historique</label>
-                    <input
-                      className="form-input"
-                      type="date"
-                      value={statusDialog.dateArret}
-                      max={statusDialog.date}
-                      required
-                      onChange={(e) => setStatusDialog((current) => ({ ...current, dateArret: e.target.value }))}
-                    />
-                  </div>
-                  <div className="form-group" style={{ marginTop: 14 }}>
-                    <label className="form-label required">Motif de suspension</label>
-                    <select
-                      className="form-input"
-                      value={statusDialog.motif}
-                      required
-                      onChange={(e) => setStatusDialog((current) => ({ ...current, motif: e.target.value }))}
-                    >
-                      {MOTIFS_ARRET.map((motif) => (
-                        <option key={motif.value} value={motif.value}>{motif.label}</option>
-                      ))}
-                    </select>
-                  </div>
-                </>
-              )}
-            </div>
-            <div className="modal-footer">
-              <button type="button" className="btn btn-secondary" onClick={() => setStatusDialog(null)}>
-                Annuler
-              </button>
-              <button type="submit" className="btn btn-primary">
-                {statusDialog.statut === 'SUSPENDU' ? 'Confirmer la suspension' : 'Confirmer la reprise'}
-              </button>
-            </div>
-          </form>
-        </div>
+            <Form.Item
+              label={
+                statusDialog.statut === 'SUSPENDU' ? "Date d'arret" : 'Date de reprise'
+              }
+              name="date"
+              rules={[{ required: true, message: 'Date requise' }]}
+            >
+              <Input
+                type="date"
+                min={statusDialog.statut === 'ACTIF'
+                  ? lendemain(evenementEnCours?.dateArret || statusDialog.dateArret)
+                  : undefined}
+                max={today()}
+              />
+            </Form.Item>
+
+            {statusDialog.statut === 'SUSPENDU' && (
+              <Form.Item
+                label="Motif de suspension"
+                name="motif"
+                rules={[{ required: true, message: 'Motif requis' }]}
+              >
+                <Select options={MOTIFS_ARRET} />
+              </Form.Item>
+            )}
+
+            {statusDialog.statut === 'ACTIF' && !evenementEnCours && (
+              <>
+                <Form.Item
+                  label="Date de suspension historique"
+                  name="dateArret"
+                  rules={[{ required: true, message: 'Date requise' }]}
+                >
+                  <Input type="date" max={statusDialog.date} />
+                </Form.Item>
+                <Form.Item
+                  label="Motif de suspension"
+                  name="motif"
+                  rules={[{ required: true, message: 'Motif requis' }]}
+                >
+                  <Select options={MOTIFS_ARRET} />
+                </Form.Item>
+              </>
+            )}
+          </Form>
+        </Modal>
       )}
     </div>
   );

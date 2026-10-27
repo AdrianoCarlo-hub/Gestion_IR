@@ -1,13 +1,10 @@
-import { useEffect, useState, useRef } from 'react';
-import { LuTriangleAlert, LuInfo, LuX, LuCircleCheck, LuCircleX } from "react-icons/lu";
+import { Modal } from 'antd';
+import { ExclamationCircleFilled, QuestionCircleFilled } from '@ant-design/icons';
 
-const ICONS = {
-  warning: LuTriangleAlert,
-  question: LuInfo,
-  error: LuCircleX,
-  danger: LuTriangleAlert,
-};
-
+/**
+ * Dialogue de confirmation (API conservee) :
+ * ouvert, titre, message, texteConfirmer, texteAnnuler, danger, onConfirmer, onAnnuler
+ */
 export default function ConfirmDialog({
   ouvert,
   titre = 'Confirmation',
@@ -18,106 +15,29 @@ export default function ConfirmDialog({
   onConfirmer,
   onAnnuler,
 }) {
-  const [visible, setVisible] = useState(false);
-  const dialogRef = useRef(null);
-
-  useEffect(() => {
-    if (ouvert) {
-      setVisible(true);
-      document.body.style.overflow = 'hidden';
-    } else {
-      setVisible(false);
-      document.body.style.overflow = '';
-    }
-    return () => {
-      document.body.style.overflow = '';
-    };
-  }, [ouvert]);
-
-  // Animation de fermeture
-  useEffect(() => {
-    if (!ouvert && visible) {
-      const timer = setTimeout(() => {
-        setVisible(false);
-      }, 250); // Correspond a la duree de l'animation
-      return () => clearTimeout(timer);
-    }
-  }, [ouvert, visible]);
-
-  // Gestion des touches clavier
-  useEffect(() => {
-    const handler = (e) => {
-      if (e.key === 'Escape' && ouvert) {
-        e.preventDefault();
-        onAnnuler();
-      }
-      if (e.key === 'Enter' && ouvert) {
-        e.preventDefault();
-        onConfirmer();
-      }
-    };
-    window.addEventListener('keydown', handler);
-    return () => window.removeEventListener('keydown', handler);
-  }, [ouvert, onAnnuler, onConfirmer]);
-
-  // Fermeture au clic sur l'arriere-plan
-  const handleBackdropClick = (e) => {
-    if (e.target === dialogRef.current) {
-      onAnnuler();
-    }
-  };
-
-  // Determination de l'icône selon le niveau de danger
-  const getIconType = () => {
-    if (danger) return 'warning';
-    return 'question';
-  };
-
-  const Icon = ICONS[getIconType()] || LuInfo;
-
-  if (!ouvert) return null;
-
   return (
-    <div
-      className={`modal-overlay ${visible ? 'visible' : ''}`}
-      onClick={handleBackdropClick}
-      ref={dialogRef}
+    <Modal
+      open={ouvert}
+      title={
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+          {danger ? (
+            <ExclamationCircleFilled style={{ color: '#DC2626' }} />
+          ) : (
+            <QuestionCircleFilled style={{ color: '#0E7A55' }} />
+          )}
+          {titre}
+        </span>
+      }
+      okText={texteConfirmer}
+      cancelText={texteAnnuler}
+      okButtonProps={{ danger }}
+      onOk={onConfirmer}
+      onCancel={onAnnuler}
+      centered
+      width={440}
+      destroyOnHidden
     >
-      <div
-        className={`modal-box confirm-dialog ${visible ? 'visible' : ''}`}
-        onClick={(e) => e.stopPropagation()}
-      >
-        {/* Icône de confirmation */}
-        <div className={`confirm-dialog-icon ${danger ? 'warning' : 'question'}`}>
-          <Icon className="icon" />
-        </div>
-        
-        {/* Header */}
-        <div className="modal-header">
-          <h3>{titre}</h3>
-        </div>
-        
-        {/* Body */}
-        <div className="modal-body">
-          <p>{message}</p>
-        </div>
-        
-        {/* Footer avec boutons */}
-        <div className="modal-footer">
-          <button 
-            className="btn btn-secondary" 
-            onClick={onAnnuler}
-          >
-            {texteAnnuler}
-          </button>
-          <button
-            className={danger ? 'btn btn-danger' : 'btn btn-primary'}
-            onClick={onConfirmer}
-          >
-            {texteConfirmer}
-          </button>
-        </div>
-      </div>
-    </div>
+      <p style={{ fontSize: 14, color: '#3c5350', marginBottom: 4 }}>{message}</p>
+    </Modal>
   );
 }

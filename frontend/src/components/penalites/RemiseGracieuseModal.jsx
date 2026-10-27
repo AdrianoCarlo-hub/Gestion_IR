@@ -1,7 +1,7 @@
 import { useState } from 'react';
-import { LuX, LuHandHeart, LuTriangleAlert } from 'react-icons/lu';
-
-const fmt = (n) => (n == null ? '0' : Number(n).toLocaleString('fr-FR').replace(/\u202f|\u00a0/g, ' '));
+import { Alert, Form, Input, Modal } from 'antd';
+import { GiftOutlined } from '@ant-design/icons';
+import { formatAr } from '../../utils/format';
 
 /**
  * Modal de demande de remise gracieuse d'une penalite.
@@ -11,48 +11,69 @@ export default function RemiseGracieuseModal({ ouvert, penalite, onFermer, onVal
   const [motif, setMotif] = useState('');
   const [justificatif, setJustificatif] = useState('');
 
-  if (!ouvert || !penalite) return null;
-
   const valider = () => {
     if (!motif.trim()) return;
-    onValider && onValider({ motif: motif.trim(), justificatif: justificatif.trim() });
+    if (onValider) {
+      onValider({ motif: motif.trim(), justificatif: justificatif.trim() });
+    }
     setMotif('');
     setJustificatif('');
   };
 
   return (
-    <div className="modal-overlay visible" onClick={onFermer}>
-      <div className="modal-box legal-modal" onClick={(e) => e.stopPropagation()}>
-        <div className="modal-header">
-          <h3><LuHandHeart className="icon" /> Demande de remise gracieuse</h3>
-          <button className="btn-icon" onClick={onFermer}><LuX className="icon" /></button>
-        </div>
-        <div className="modal-body">
-          <div className="legal-warning">
-            <LuTriangleAlert className="icon" />
-            <span>
-              La remise gracieuse est exceptionnelle et soumise a la decision du responsable.
-              Elle ne suspend pas l exigibilite de la penalite ({fmt(penalite.montantAr)} Ar).
-            </span>
-          </div>
-          <div className="form-group">
-            <label className="form-label required">Motif de la demande *</label>
-            <textarea className="form-input" rows={3} value={motif}
-              onChange={(e) => setMotif(e.target.value)}
-              placeholder="Ex : difficulte financiere temporaire..." />
-          </div>
-          <div className="form-group">
-            <label className="form-label">Justificatif (reference)</label>
-            <input className="form-input" value={justificatif}
-              onChange={(e) => setJustificatif(e.target.value)}
-              placeholder="N° du document joint" />
-          </div>
-        </div>
-        <div className="modal-footer">
-          <button className="btn btn-secondary" onClick={onFermer}>Annuler</button>
-          <button className="btn btn-primary" onClick={valider}>Envoyer la demande</button>
-        </div>
-      </div>
-    </div>
+    <Modal
+      open={!!ouvert && !!penalite}
+      title={
+        <span
+          style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}
+        >
+          <GiftOutlined style={{ color: '#0E7A55' }} />
+          Demande de remise gracieuse
+        </span>
+      }
+      onCancel={onFermer}
+      onOk={valider}
+      okText="Envoyer la demande"
+      cancelText="Annuler"
+      okButtonProps={{ disabled: !motif.trim() }}
+      centered
+      width={520}
+      destroyOnHidden
+    >
+      {penalite && (
+        <>
+          <Alert
+            type="warning"
+            showIcon
+            style={{ marginBottom: 16 }}
+            message="Remise exceptionnelle"
+            description={
+              <span>
+                La remise gracieuse est exceptionnelle et soumise a la decision du
+                responsable. Elle ne suspend pas l&apos;exigibilite de la penalite (
+                {formatAr(penalite.montantAr)}).
+              </span>
+            }
+          />
+          <Form layout="vertical">
+            <Form.Item label="Motif de la demande" required>
+              <Input.TextArea
+                rows={3}
+                value={motif}
+                onChange={(e) => setMotif(e.target.value)}
+                placeholder="Ex : difficulte financiere temporaire..."
+              />
+            </Form.Item>
+            <Form.Item label="Justificatif (reference)">
+              <Input
+                value={justificatif}
+                onChange={(e) => setJustificatif(e.target.value)}
+                placeholder="Reference du document joint"
+              />
+            </Form.Item>
+          </Form>
+        </>
+      )}
+    </Modal>
   );
 }

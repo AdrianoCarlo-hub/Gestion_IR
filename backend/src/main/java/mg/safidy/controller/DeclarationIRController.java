@@ -1,6 +1,7 @@
 package mg.safidy.controller;
 
 import mg.safidy.config.AuditLogger;
+import mg.safidy.dto.DeclarationImpayeeDTO;
 import mg.safidy.dto.DeclarationIRSearchCriteria;
 import mg.safidy.exception.BusinessException;
 import mg.safidy.model.DeclarationIR;
@@ -81,6 +82,24 @@ public class DeclarationIRController {
         return service.rechercher(criteria);
     }
 
+    @GetMapping("/impayees")
+    public List<DeclarationImpayeeDTO> impayees(
+            @RequestParam(required = false) Integer annee) {
+        statutAutomatiqueService.appliquerRetards();
+        return service.listerImpayees(annee);
+    }
+
+    @PostMapping("/{id}/relancer")
+    public ResponseEntity<Map<String, Object>> relancer(@PathVariable Long id) {
+        DeclarationIR d = repo.findById(id)
+            .orElseThrow(() -> new BusinessException("Declaration introuvable"));
+        String nif = d.getContribuable() != null ? d.getContribuable().getNif() : "-";
+        audit.log("RELANCE", "declaration_ir", id,
+            "Relance declar. " + d.getAnnee() + " - NIF " + nif);
+        return ResponseEntity.ok(Map.of(
+            "message", "Relance enregistree pour le contribuable NIF " + nif));
+    }
+
     @GetMapping("/{id}")
     public DeclarationIR trouver(@PathVariable Long id) {
         return service.trouverParId(id);
@@ -135,12 +154,15 @@ public class DeclarationIRController {
 
     @PostMapping("/{id}/calculer")
     public ResponseEntity<DeclarationIR> calculer(@PathVariable Long id,
-                                                   @RequestBody Map<String, Object> body) {
-        Long reintegrations = body.get("totalReintegrations") == null ? 0L
+                                                   @RequestBody(required = false) Map<String, Object> body) {
+        // Les ajustements manuels ne sont plus saisis dans l'UI :
+        // absence de cle = calcul automatique (reintegrations conservees,
+        // acomptes verses calcules depuis les acomptes provisionnels payes).
+        Long reintegrations = body == null || body.get("totalReintegrations") == null ? null
                 : Long.valueOf(body.get("totalReintegrations").toString());
-        Long deductions = body.get("totalDeductions") == null ? 0L
+        Long deductions = body == null || body.get("totalDeductions") == null ? null
                 : Long.valueOf(body.get("totalDeductions").toString());
-        Long acomptes = body.get("acomptesVerses") == null ? 0L
+        Long acomptes = body == null || body.get("acomptesVerses") == null ? null
                 : Long.valueOf(body.get("acomptesVerses").toString());
         DeclarationIR saved = service.calculerEtEnregistrer(id, reintegrations, deductions, acomptes);
         audit.log("CALCUL_IR", "declaration_ir", id, "IR du=" + saved.getIrDu() + " Ar");

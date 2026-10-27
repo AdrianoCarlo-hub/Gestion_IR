@@ -22,8 +22,8 @@ public class IRCalculationService {
     /**
      * Calcul complet de l'IR.
      *
-     * Le totalReintegrations doit deja inclure les charges sans facture
-     * (calculees par l'appelant).
+     * Les reintegrations sont celles declarees explicitement par l'utilisateur.
+     * Les charges sans justificatif ne sont pas reintegrees automatiquement.
      *
      * Le minimum de perception est proratise selon les mois actifs (regle SU6) :
      * minimum = part fixe x mois actifs / 12 + % du CA realise.
@@ -51,6 +51,32 @@ public class IRCalculationService {
             Long deficitDisponible,
             Long acomptesVerses,
             Integer moisActifs) {
+        return calculer(contribuable, caHt, totalCharges, totalChargesSansFacture,
+                totalReintegrations, totalDeductions, deficitDisponible, acomptesVerses,
+                moisActifs, 0L);
+    }
+
+    /**
+     * Calcul complet de l'IR avec le nouveau solde :
+     *
+     *   SOLDE TOTAL A PAYER = IR du + penalites dues + 1er acompte (50 % de l'IR du)
+     *                          - acomptes deja verses
+     *
+     * La penalite est doublement prise en compte (regle voulue) :
+     *   - elle augmente la base imposable via les reinTEGRATIONS ;
+     *   - elle s'ajoute au montant a payer (sanction fiscale non deductible).
+     */
+    public ResultatCalculIR calculer(
+            Contribuable contribuable,
+            Long caHt,
+            Long totalCharges,
+            Long totalChargesSansFacture,
+            Long totalReintegrations,
+            Long totalDeductions,
+            Long deficitDisponible,
+            Long acomptesVerses,
+            Integer moisActifs,
+            Long penalitesDues) {
 
         if (caHt == null) caHt = 0L;
         if (totalCharges == null) totalCharges = 0L;
@@ -62,14 +88,13 @@ public class IRCalculationService {
         if (moisActifs == null) moisActifs = 12;
         if (moisActifs < 0) moisActifs = 0;
         if (moisActifs > 12) moisActifs = 12;
+        if (penalitesDues == null) penalitesDues = 0L;
+        if (penalitesDues < 0) penalitesDues = 0L;
 
         ResultatCalculIR r = new ResultatCalculIR();
 
-        // Taux effectif : droit commun (TAUX_IR) ou taux propre au secteur.
-        // Un taux sectoriel different du droit commun est une option (ex. Sante/Education 10 %)
-        // applicable uniquement au regime REEL_OPTION.
-        BigDecimal tauxDroitCommun = getTaux("TAUX_IR", new BigDecimal("20"));
-        BigDecimal tauxIr = determinerTaux(contribuable, tauxDroitCommun);
+        // Regime unique REEL_OBLIGATOIRE : toujours le taux de droit commun.
+        BigDecimal tauxIr = getTaux("TAUX_IR", new BigDecimal("20"));
         r.setTauxApplique(tauxIr);
 
         r.setCaHt(caHt);
@@ -77,14 +102,16 @@ public class IRCalculationService {
         r.setTotalChargesSansFacture(totalChargesSansFacture);
         r.setTotalDeductions(totalDeductions);
         r.setAcomptesVerses(acomptesVerses);
+        r.setPenalitesDues(penalitesDues);
 
         // Etape 1 : resultat comptable
         long resultatComptable = caHt - totalCharges;
         r.setResultatComptable(resultatComptable);
 
-        // Reintegrations effectives = reintegrations declarees + charges sans facture
-        long reintegrationsEffectives = totalReintegrations + totalChargesSansFacture;
+        // Seules les reintegrations explicites sont ajoutees au resultat comptable.
+        long reintegrationsEffectives = totalReintegrations;
         r.setTotalReintegrations(reintegrationsEffectives);
+        r.setTotalChargesSansFacture(0L);
 
         // Etape 2 : base avant deficit
         long baseAvantDeficit = resultatComptable + reintegrationsEffectives - totalDeductions;
@@ -135,38 +162,28 @@ public class IRCalculationService {
         long irDu = Math.max(r.getIrBrut() == null ? 0L : r.getIrBrut(), minimum);
         r.setIrDu(irDu);
 
-        // Etape 8 : solde
-        long solde = irDu - acomptesVerses;
-        if (solde >= 0) {
-            r.setSoldeAPayer(solde);
+        // Etape 8 : 1er acompte de l'annee N+1 = taux (50 %) x IR du
+        BigDecimal tauxAcompte = getTaux("TAUX_ACOMPTE", new BigDecimal("50"));
+        long premierAcompte = BigDecimal.valueOf(irDu)
+                .multiply(tauxAcompte)
+                .divide(BigDecimal.valueOf(100), 0, RoundingMode.HALF_UP)
+                .longValue();
+        r.setPremierAcompte(premierAcompte);
+
+        // Etape 9 : SOLDE TOTAL A PAYER
+        //   IR du + penalites dues + 1er acompte N+1 - acomptes verses
+        long total = irDu + penalitesDues + premierAcompte - acomptesVerses;
+        if (total >= 0) {
+            r.setTotalAPayer(total);
+            r.setSoldeAPayer(total);
             r.setCreditImpot(0L);
         } else {
+            r.setTotalAPayer(0L);
             r.setSoldeAPayer(0L);
-            r.setCreditImpot(-solde);
+            r.setCreditImpot(-total);
         }
 
         return r;
-    }
-
-    /**
-     * Determine le taux d'IR applicable.
-     * Le taux de droit commun (parametre TAUX_IR) s'applique par defaut.
-     * Si le secteur definit un taux specifique different, il s'agit d'une option
-     * (ex. Sante/Education : 10 %) qui n'est retenue qu'au regime REEL_OPTION.
-     */
-    private BigDecimal determinerTaux(Contribuable contribuable, BigDecimal tauxDroitCommun) {
-        if (contribuable == null || contribuable.getSecteur() == null) {
-            return tauxDroitCommun;
-        }
-        BigDecimal tauxSecteur = contribuable.getSecteur().getTauxIr();
-        if (tauxSecteur == null || tauxSecteur.signum() <= 0) {
-            return tauxDroitCommun;
-        }
-        boolean estOption = tauxSecteur.compareTo(tauxDroitCommun) != 0;
-        if (!estOption) {
-            return tauxSecteur;
-        }
-        return "REEL_OPTION".equals(contribuable.getRegime()) ? tauxSecteur : tauxDroitCommun;
     }
 
     private long calculerMinimumPerception(Contribuable contribuable, long caHt, int moisActifs) {

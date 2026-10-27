@@ -1,76 +1,140 @@
 import { useEffect, useState, useCallback } from 'react';
+import {
+  Button,
+  Card,
+  Col,
+  InputNumber,
+  Progress,
+  Row,
+  Space,
+  Statistic,
+  Table,
+  Tag,
+  Tooltip,
+  Typography,
+} from 'antd';
+import {
+  CalendarOutlined,
+  CheckCircleOutlined,
+  ClockCircleOutlined,
+  ContainerOutlined,
+  CreditCardOutlined,
+  FileTextOutlined,
+  PauseCircleOutlined,
+  PlayCircleOutlined,
+  PlusOutlined,
+  RiseOutlined,
+  WarningOutlined,
+  FileExcelOutlined,
+} from '@ant-design/icons';
 import { lister as listerContribuables } from '../services/contribuableService';
 import * as service from '../services/acompteService';
+import * as exportService from '../services/exportService';
 import ContribuableRecherche from '../components/ContribuableRecherche';
 import ConfirmDialog from '../components/ConfirmDialog';
 import AcompteCard from '../components/acomptes/AcompteCard';
 import AcompteDouaneModal from '../components/acomptes/AcompteDouaneModal';
 import SimulateurLiquidation from '../components/acomptes/SimulateurLiquidation';
 import ChronologiePaiements from '../components/acomptes/ChronologiePaiements';
-import { SkeletonTable, SkeletonStatsGrid } from '../components/Spinner';
+import { SkeletonStatsGrid, SkeletonTable } from '../components/Spinner';
+import EmptyState from '../components/EmptyState';
 import { useToast } from '../context/ToastContext';
-import {
-  LuCalendar, LuCircleAlert, LuCircleCheck, LuClock3, LuCreditCard,
-  LuFileText, LuPackage, LuPlus, LuShip, LuTrendingUp, LuWallet,
-} from 'react-icons/lu';
+import { formatAr, formatDate, STATUT_ACOMPTE } from '../utils/format';
 
-const fmt = (n) => (n == null ? '0' : Number(n).toLocaleString('fr-FR').replace(/\u202f|\u00a0/g, ' '));
+const { Text } = Typography;
+
 const anneeCourante = new Date().getFullYear();
+
+const STATUTS_ANNEE = {
+  PAYE: { couleur: 'green', libelle: 'Paye' },
+  PARTIEL: { couleur: 'orange', libelle: 'Partiel' },
+  EN_COURS: { couleur: 'blue', libelle: 'En cours' },
+  SUSPENDU: { couleur: 'default', libelle: 'Suspendu' },
+};
+
+function celluleAcompte(acompte, montant, datePaiement) {
+  const statut = acompte ? acompte.statut : null;
+  const info = STATUT_ACOMPTE[statut] || { couleur: 'default', libelle: statut || '-' };
+  const valeur = montant != null ? montant : acompte ? acompte.montantAr : null;
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+      <Text strong className="mono">
+        {formatAr(valeur)}
+      </Text>
+      <Space size={6} wrap>
+        <Tag color={info.couleur}>{info.libelle}</Tag>
+        <Text type="secondary" style={{ fontSize: 12 }}>
+          {datePaiement ? formatDate(datePaiement) : '-'}
+        </Text>
+      </Space>
+    </div>
+  );
+}
 
 export default function Acomptes() {
   const toast = useToast();
   const [contribuables, setContribuables] = useState([]);
   const [selected, setSelected] = useState('');
   const [annee, setAnnee] = useState(anneeCourante);
+  const [lignes, setLignes] = useState([]);
   const [situation, setSituation] = useState(null);
   const [echeances, setEcheances] = useState(null);
   const [chronologie, setChronologie] = useState([]);
   const [loading, setLoading] = useState(false);
   const [douaneOuvert, setDouaneOuvert] = useState(false);
   const [confirm, setConfirm] = useState(null);
+  const [exportLoading, setExportLoading] = useState(false);
 
   useEffect(() => {
     listerContribuables().then(setContribuables).catch(() => {});
   }, []);
 
-  const charger = useCallback(async (id, an) => {
-    if (!id) {
-      setSituation(null);
-      setEcheances(null);
-      setChronologie([]);
-      return;
-    }
-    setLoading(true);
-    try {
-      setSituation(await service.getSituation(id, an));
-      try {
-        setEcheances(await service.getEcheances(id, an));
-      } catch {
+  const charger = useCallback(
+    async (id, exercice) => {
+      if (!id) {
+        setLignes([]);
+        setSituation(null);
         setEcheances(null);
-      }
-      try {
-        setChronologie(await service.getChronologie(id));
-      } catch {
         setChronologie([]);
+        return;
       }
-    } catch (e) {
-      toast.error(e.response?.data?.message || 'Erreur de chargement');
-      setSituation(null);
-    } finally {
-      setLoading(false);
-    }
-  }, [toast]);
+      setLoading(true);
+      try {
+        const [parAnnee, sit, chrono] = await Promise.all([
+          service.situationParAnnee(id),
+          service.getSituation(id, exercice).catch(() => null),
+          service.getChronologie(id).catch(() => []),
+        ]);
+        setLignes(Array.isArray(parAnnee) ? parAnnee : []);
+        setSituation(sit);
+        setChronologie(Array.isArray(chrono) ? chrono : []);
+        try {
+          setEcheances(await service.getEcheances(id, exercice));
+        } catch {
+          setEcheances(null);
+        }
+      } catch (e) {
+        toast.error(e.response?.data?.message || 'Erreur de chargement');
+        setLignes([]);
+        setSituation(null);
+      } finally {
+        setLoading(false);
+      }
+    },
+    [toast]
+  );
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    if (selected) charger(selected, annee);
+    charger(selected, annee);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selected, annee]);
 
   const suspendre = (a) => {
     setConfirm({
       titre: 'Demander la suspension',
-      message: 'La suspension d un acompte provisionnel sans motif valable expose a une amende de 80 % (CDI art. 05.01.06). Confirmer ?',
+      message:
+        'La suspension d un acompte provisionnel sans motif valable expose a une amende de 80 % (CDI art. 05.01.06). Confirmer ?',
       texteConfirmer: 'Suspendre',
       danger: true,
       onConfirmer: async () => {
@@ -83,6 +147,18 @@ export default function Acomptes() {
         }
       },
     });
+  };
+
+  const handleExportExcel = async () => {
+    setExportLoading(true);
+    try {
+      await exportService.exportAcomptes();
+      toast.success('Export effectue avec succes');
+    } catch (e) {
+      toast.error(e.response?.data?.message || "Erreur lors de l export");
+    } finally {
+      setExportLoading(false);
+    }
   };
 
   const reactiver = async (a) => {
@@ -116,151 +192,405 @@ export default function Acomptes() {
     }
   };
 
-  const s = situation || { creation: [], provisionnels: [], douane: [] };
+  const rendreActions = (acompte, libelle) => {
+    if (!acompte || !acompte.idAcompte) return null;
+    const statut = acompte.statut;
+    return (
+      <Space size={4} wrap>
+        <Text type="secondary" style={{ fontSize: 11 }}>
+          {libelle}
+        </Text>
+        {statut !== 'PAYE' && statut !== 'SUSPENDU' && (
+          <Tooltip title="Demander la suspension">
+            <Button
+              size="small"
+              icon={<PauseCircleOutlined />}
+              aria-label={'Suspendre l acompte ' + libelle}
+              onClick={() => suspendre(acompte)}
+            />
+          </Tooltip>
+        )}
+        {statut === 'SUSPENDU' && (
+          <Tooltip title="Reactiver l acompte">
+            <Button
+              size="small"
+              type="primary"
+              ghost
+              icon={<PlayCircleOutlined />}
+              aria-label={'Reactiver l acompte ' + libelle}
+              onClick={() => reactiver(acompte)}
+            />
+          </Tooltip>
+        )}
+        {statut !== 'PAYE' && (
+          <Tooltip title="Enregistrer le reglement">
+            <Button
+              size="small"
+              type="primary"
+              icon={<CheckCircleOutlined />}
+              aria-label={'Regler l acompte ' + libelle}
+              onClick={() => payer(acompte)}
+            />
+          </Tooltip>
+        )}
+      </Space>
+    );
+  };
+
+  const s = {
+    creation: situation?.creation || [],
+    provisionnels: situation?.provisionnels || [],
+    douane: situation?.douane || [],
+    cumulVerse: situation?.cumulVerse || 0,
+    irN1: situation?.irN1 || 0,
+  };
   const contribuableSelectionne = contribuables.find(
-    (contribuable) => String(contribuable.idContribuable) === String(selected)
+    (c) => String(c.idContribuable) === String(selected)
   );
   const anneeCreation = contribuableSelectionne?.dateImmatriculation
     ? new Date(contribuableSelectionne.dateImmatriculation).getFullYear()
     : null;
-  const totalExigibles = s.totalExigibles || 0;
-  const cumulVerse = s.cumulVerse || 0;
-  const solde = s.creditImpot > 0 ? -s.creditImpot : (s.solde || 0);
-  const progression = totalExigibles > 0
-    ? Math.min(100, Math.round((cumulVerse / totalExigibles) * 100))
-    : 0;
+
+  const cumulStatut = (statuts) =>
+    lignes.reduce((total, ligne) => {
+      const t1 =
+        ligne.acompte1 && statuts.includes(ligne.acompte1.statut) ? ligne.montant1 || 0 : 0;
+      const t2 =
+        ligne.acompte2 && statuts.includes(ligne.acompte2.statut) ? ligne.montant2 || 0 : 0;
+      return total + t1 + t2;
+    }, 0);
+
+  const totalAttendu = lignes.reduce((total, ligne) => {
+    const t1 =
+      ligne.acompte1 && ligne.acompte1.statut !== 'SUSPENDU' ? ligne.montant1 || 0 : 0;
+    const t2 =
+      ligne.acompte2 && ligne.acompte2.statut !== 'SUSPENDU' ? ligne.montant2 || 0 : 0;
+    return total + t1 + t2;
+  }, 0);
+  const totalPaye = cumulStatut(['PAYE']);
+  const totalRetard = cumulStatut(['EN_RETARD']);
+  const resteAPayer = Math.max(totalAttendu - totalPaye, 0);
+  const progression =
+    totalAttendu > 0 ? Math.min(100, Math.round((totalPaye / totalAttendu) * 100)) : 0;
+
+  const ligneExercice =
+    lignes.find((ligne) => Number(ligne.annee) === Number(annee)) || null;
+  const cartesExercice = ligneExercice
+    ? [
+        ligneExercice.acompte1
+          ? {
+              ...ligneExercice.acompte1,
+              numero: 1,
+              annee: ligneExercice.annee,
+              montantAr: ligneExercice.acompte1.montantAr ?? ligneExercice.montant1,
+              baseIrN1: ligneExercice.acompte1.baseIrN1 ?? ligneExercice.baseIrN1,
+            }
+          : null,
+        ligneExercice.acompte2
+          ? {
+              ...ligneExercice.acompte2,
+              numero: 2,
+              annee: ligneExercice.annee,
+              montantAr: ligneExercice.acompte2.montantAr ?? ligneExercice.montant2,
+              baseIrN1: ligneExercice.acompte2.baseIrN1 ?? ligneExercice.baseIrN1,
+            }
+          : null,
+      ].filter(Boolean)
+    : [];
+  const cartesAffichees = cartesExercice.length > 0 ? cartesExercice : s.provisionnels;
+  const echeance15Mai = echeances?.eligible ? echeances.echeance15Mai : null;
+
   const totalDouane = s.douane.reduce((total, acompte) => total + (acompte.montantAr || 0), 0);
-  const provisionnelMai = echeances?.eligible ? echeances.echeance15Mai : null;
-  const provisionnelNovembre = echeances?.eligible ? echeances.echeance15Novembre : null;
+
+  const colonnes = [
+    {
+      title: 'Annee',
+      dataIndex: 'annee',
+      key: 'annee',
+      width: 90,
+      render: (v) => <Text strong>{v}</Text>,
+    },
+    {
+      title: 'Base IR N-1',
+      dataIndex: 'baseIrN1',
+      key: 'baseIrN1',
+      width: 150,
+      align: 'right',
+      render: (v) => <span className="mono">{formatAr(v)}</span>,
+    },
+    {
+      title: 'Acompte 1 - 15 mai',
+      key: 'acompte1',
+      render: (_, ligne) => celluleAcompte(ligne.acompte1, ligne.montant1, ligne.date1),
+    },
+    {
+      title: 'Acompte 2 - 15 novembre',
+      key: 'acompte2',
+      render: (_, ligne) => celluleAcompte(ligne.acompte2, ligne.montant2, ligne.date2),
+    },
+    {
+      title: 'Statut',
+      dataIndex: 'statut',
+      key: 'statut',
+      width: 120,
+      render: (statut) => (
+        <Tag color={STATUTS_ANNEE[statut]?.couleur || 'default'}>
+          {STATUTS_ANNEE[statut]?.libelle || statut || '-'}
+        </Tag>
+      ),
+    },
+    {
+      title: 'Actions',
+      key: 'actions',
+      width: 260,
+      render: (_, ligne) => (
+        <Space size={10} wrap>
+          {rendreActions(ligne.acompte1, 'A1')}
+          {rendreActions(ligne.acompte2, 'A2')}
+        </Space>
+      ),
+    },
+  ];
+
+  const colonnesDouane = [
+    {
+      title: 'Date',
+      dataIndex: 'dateEcheance',
+      key: 'date',
+      render: (v) => formatDate(v),
+    },
+    {
+      title: 'Reference douane',
+      dataIndex: 'referenceDouane',
+      key: 'reference',
+      render: (v) => v || '-',
+    },
+    {
+      title: 'Valeur CAF',
+      dataIndex: 'baseIrN1',
+      key: 'caf',
+      align: 'right',
+      render: (v) => formatAr(v),
+    },
+    {
+      title: 'Taux',
+      dataIndex: 'tauxPct',
+      key: 'taux',
+      align: 'right',
+      render: (v) => (v != null ? v + ' %' : '-'),
+    },
+    {
+      title: 'Montant',
+      dataIndex: 'montantAr',
+      key: 'montant',
+      align: 'right',
+      render: (v) => <Text strong>{formatAr(v)}</Text>,
+    },
+    {
+      title: 'Statut',
+      dataIndex: 'statut',
+      key: 'statut',
+      render: (statut) => (
+        <Tag color={STATUT_ACOMPTE[statut]?.couleur || 'default'}>
+          {STATUT_ACOMPTE[statut]?.libelle || statut || '-'}
+        </Tag>
+      ),
+    },
+  ];
+
+  const colonnesCreation = [
+    { title: 'Annee', dataIndex: 'annee', key: 'annee', width: 100 },
+    {
+      title: "Date d'echeance",
+      dataIndex: 'dateEcheance',
+      key: 'dateEcheance',
+      render: (v) => formatDate(v),
+    },
+    {
+      title: 'Montant',
+      dataIndex: 'montantAr',
+      key: 'montant',
+      align: 'right',
+      render: (v) => <Text strong>{formatAr(v)}</Text>,
+    },
+    {
+      title: 'Statut',
+      dataIndex: 'statut',
+      key: 'statut',
+      render: (statut) => (
+        <Tag color={STATUT_ACOMPTE[statut]?.couleur || 'default'}>
+          {STATUT_ACOMPTE[statut]?.libelle || statut || '-'}
+        </Tag>
+      ),
+    },
+  ];
 
   return (
-    <div className="page acomptes-page">
-      <header className="acomptes-header">
-        <div className="acomptes-header-title">
-          <span className="acomptes-eyebrow"><LuTrendingUp aria-hidden="true" /> Gestion fiscale</span>
-          <h1>Acomptes IR</h1>
-          <p className="page-sub">Exercice {annee} — Suivi des acomptes provisionnels et douaniers</p>
+    <div className="page">
+      <div className="page-header">
+        <div>
+          <h1 className="page-title">Acomptes</h1>
+          <p className="page-subtitle">
+            Exercice {annee} - Deux acomptes de 50 % de l IR N-1 (15 mai et 15 novembre)
+          </p>
         </div>
-        <div className="acomptes-header-selector">
-          <div className="acomptes-selector-contribuable">
-            <label className="form-label" htmlFor="acompte-contribuable">Contribuable</label>
+        <Space wrap size={12}>
+          <div style={{ width: 320, maxWidth: '100%' }}>
             <ContribuableRecherche
               contribuables={contribuables}
               value={selected}
               onChange={(id) => setSelected(id)}
             />
           </div>
-          <div className="acomptes-selector-annee">
-            <label className="form-label" htmlFor="acompte-annee">Exercice</label>
-            <input id="acompte-annee" type="number" className="form-input" value={annee}
-              min="2000" max="2100" onChange={(e) => setAnnee(Number(e.target.value))} />
-          </div>
-        </div>
-      </header>
+          <InputNumber
+            min={2000}
+            max={2100}
+            value={annee}
+            onChange={(v) => setAnnee(v || anneeCourante)}
+            addonBefore="Exercice"
+            aria-label="Exercice"
+            style={{ width: 180 }}
+          />
+          <Button
+            icon={<FileExcelOutlined />}
+            onClick={handleExportExcel}
+            loading={exportLoading}
+          >
+            Exporter Excel
+          </Button>
+        </Space>
+      </div>
 
       {!selected ? (
-        <div className="acomptes-empty-state">
-          <span className="acomptes-empty-icon"><LuWallet aria-hidden="true" /></span>
-          <h2>Selectionnez un contribuable</h2>
-          <p>Choisissez un contribuable pour consulter ses echeances et paiements.</p>
-        </div>
+        <EmptyState
+          titre="Selectionnez un contribuable"
+          texte="Choisissez un contribuable pour consulter ses echeances et paiements."
+        />
       ) : loading ? (
-        <div className="acomptes-loading" aria-live="polite">
+        <div aria-live="polite">
           <SkeletonStatsGrid count={4} />
-          <SkeletonTable rows={4} cols={5} />
+          <SkeletonTable rows={5} cols={6} />
         </div>
       ) : (
-        <div className="acomptes-content">
-          <section className="acomptes-kpi-section" aria-label="Synthese des acomptes">
-            <div className="acompte-kpi-grid">
-              <article className="acompte-kpi accent-blue">
-                <span className="kpi-icon"><LuFileText aria-hidden="true" /></span>
-                <span className="kpi-label">IR N-1</span>
-                <strong className="kpi-value">{fmt(s.irN1)} <small>Ar</small></strong>
-                <span className="kpi-caption">Base de reference des provisions</span>
-              </article>
-              <article className="acompte-kpi accent-green">
-                <span className="kpi-icon"><LuCircleCheck aria-hidden="true" /></span>
-                <span className="kpi-label">Total exigibles</span>
-                <strong className="kpi-value">{fmt(totalExigibles)} <small>Ar</small></strong>
-                <span className="kpi-caption">Echeances enregistrees pour {annee}</span>
-              </article>
-              <article className="acompte-kpi accent-emeraude">
-                <span className="kpi-icon"><LuCreditCard aria-hidden="true" /></span>
-                <span className="kpi-label">Cumul verse</span>
-                <strong className="kpi-value">{fmt(cumulVerse)} <small>Ar</small></strong>
-                <span className="kpi-caption">{progression} % des montants exigibles</span>
-                <span className="kpi-progress-bar" role="progressbar" aria-label="Progression des paiements"
-                  aria-valuemin="0" aria-valuemax="100" aria-valuenow={progression}>
-                  <span className="kpi-progress-fill" style={{ width: progression + '%' }} />
-                </span>
-              </article>
-              <article className={'acompte-kpi ' + (solde > 0 ? 'accent-red' : 'accent-green')}>
-                <span className="kpi-icon">
-                  {solde > 0 ? <LuCircleAlert aria-hidden="true" /> : <LuCircleCheck aria-hidden="true" />}
-                </span>
-                <span className="kpi-label">{solde > 0 ? 'Solde a payer' : 'Credit d impot'}</span>
-                <strong className="kpi-value">{fmt(Math.abs(solde))} <small>Ar</small></strong>
-                <span className="kpi-caption">{solde > 0 ? 'Reste sur les acomptes exigibles' : 'Aucun solde restant sur les acomptes'}</span>
-              </article>
-            </div>
-          </section>
+        <>
+          <Row gutter={[16, 16]}>
+            <Col xs={12} md={6}>
+              <Card>
+                <Statistic
+                  title="Total a payer"
+                  value={totalAttendu}
+                  precision={0}
+                  suffix="Ar"
+                  prefix={<FileTextOutlined style={{ color: '#0369A1' }} />}
+                />
+              </Card>
+            </Col>
+            <Col xs={12} md={6}>
+              <Card>
+                <Statistic
+                  title="Total paye"
+                  value={totalPaye}
+                  precision={0}
+                  suffix="Ar"
+                  prefix={<CheckCircleOutlined style={{ color: '#16A34A' }} />}
+                  valueStyle={{ color: '#16A34A' }}
+                />
+                <Progress
+                  percent={progression}
+                  size="small"
+                  showInfo={false}
+                  strokeColor="#0E7A55"
+                  style={{ marginTop: 4 }}
+                />
+              </Card>
+            </Col>
+            <Col xs={12} md={6}>
+              <Card>
+                <Statistic
+                  title="En retard"
+                  value={totalRetard}
+                  precision={0}
+                  suffix="Ar"
+                  prefix={<WarningOutlined style={{ color: '#DC2626' }} />}
+                  valueStyle={{ color: '#DC2626' }}
+                />
+              </Card>
+            </Col>
+            <Col xs={12} md={6}>
+              <Card>
+                <Statistic
+                  title="Reste a payer"
+                  value={resteAPayer}
+                  precision={0}
+                  suffix="Ar"
+                  prefix={<CreditCardOutlined style={{ color: '#EA580C' }} />}
+                  valueStyle={{ color: '#EA580C' }}
+                />
+              </Card>
+            </Col>
+          </Row>
 
-          <section className="acomptes-section">
-            <div className="section-header">
-              <div>
-                <span className="acomptes-section-kicker">IR provisionnel</span>
-                <h2><LuCalendar aria-hidden="true" /> Acomptes provisionnels</h2>
-              </div>
-              <span className="section-badge">{s.provisionnels.length} echeance(s)</span>
-            </div>
-            {s.provisionnels.length === 0 ? (
-              provisionnelMai && provisionnelNovembre ? (
-                <div className="acomptes-provisionnels-grid">
-                  <div className="acompte-card acompte-card--schedule">
-                    <header className="acompte-card-header">
-                      <div className="acompte-card-heading">
-                        <span className="acompte-card-icon"><LuCalendar aria-hidden="true" /></span>
-                        <div><span className="acompte-card-overline">Premiere echeance</span>
-                          <h3 className="acompte-card-title">15 mai {annee}</h3></div>
-                      </div>
-                      <span className="badge badge-a_payer">A payer</span>
-                    </header>
-                    <div className="acompte-card-body">
-                      <div className="acompte-detail-ligne"><span>Solde IR {annee - 1}</span><strong>{fmt(provisionnelMai.soldeN1)} Ar</strong></div>
-                      <div className="acompte-detail-ligne"><span>Acompte 1 (50 % de l'IR N-1)</span><strong>{fmt(provisionnelMai.acompte1N)} Ar</strong></div>
-                      <div className="acompte-total-ligne"><span>Total au 15 mai</span><strong>{fmt(provisionnelMai.total)} Ar</strong></div>
-                    </div>
-                  </div>
-                  <div className="acompte-card acompte-card--schedule">
-                    <header className="acompte-card-header">
-                      <div className="acompte-card-heading">
-                        <span className="acompte-card-icon"><LuCalendar aria-hidden="true" /></span>
-                        <div><span className="acompte-card-overline">Seconde echeance</span>
-                          <h3 className="acompte-card-title">15 novembre {annee}</h3></div>
-                      </div>
-                      <span className="badge badge-a_payer">A payer</span>
-                    </header>
-                    <div className="acompte-card-body">
-                      <div className="acompte-detail-ligne"><span>Acompte 2 (50 % de l'IR N-1)</span><strong>{fmt(provisionnelNovembre.acompte2N)} Ar</strong></div>
-                      <div className="acompte-total-ligne"><span>Total au 15 novembre</span><strong>{fmt(provisionnelNovembre.total)} Ar</strong></div>
-                    </div>
-                  </div>
-                </div>
-              ) : (
-                <div className="acomptes-inline-empty">
-                  <LuClock3 aria-hidden="true" />
-                  <div><strong>Aucun acompte provisionnel enregistre</strong>
-                    <span>{echeances?.message || 'Les acomptes sont generes apres validation d une declaration IR N-1.'}</span></div>
-                </div>
-              )
+          <Card
+            title={
+              <span>
+                <CalendarOutlined style={{ color: '#0E7A55', marginRight: 8 }} />
+                Situation par annee
+              </span>
+            }
+            extra={<Text type="secondary">{lignes.length} exercice(s)</Text>}
+          >
+            <Table
+              rowKey="annee"
+              size="small"
+              columns={colonnes}
+              dataSource={lignes}
+              scroll={{ x: 960 }}
+              pagination={{
+                pageSize: 10,
+                showSizeChanger: false,
+                showTotal: (total) => `${total} exercice(s)`,
+              }}
+              locale={{
+                emptyText: (
+                  <EmptyState
+                    titre="Aucun acompte enregistre"
+                    texte="Les acomptes provisionnels sont generes apres validation d une declaration IR N-1."
+                  />
+                ),
+              }}
+            />
+          </Card>
+
+          <Card
+            title={
+              <span>
+                <CalendarOutlined style={{ color: '#0369A1', marginRight: 8 }} />
+                Acomptes provisionnels - exercice {annee}
+              </span>
+            }
+            extra={<Tag color="blue">{cartesAffichees.length} acompte(s)</Tag>}
+          >
+            {cartesAffichees.length === 0 ? (
+              <EmptyState
+                titre="Aucun acompte provisionnel"
+                texte={
+                  echeances?.message ||
+                  'Les acomptes sont generes apres validation d une declaration IR N-1.'
+                }
+              />
             ) : (
-              <div className="acomptes-provisionnels-grid">
-                {s.provisionnels.map((acompte) => (
+              <div
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))',
+                  gap: 16,
+                }}
+              >
+                {cartesAffichees.map((acompte) => (
                   <AcompteCard
-                    key={acompte.idAcompte}
+                    key={acompte.idAcompte || 'acompte-' + acompte.numero}
                     acompte={acompte}
-                    echeancesDetail={acompte.numero === 1 ? provisionnelMai : null}
+                    echeancesDetail={acompte.numero === 1 ? echeance15Mai : null}
                     onSuspendre={suspendre}
                     onReactiver={reactiver}
                     onPayer={payer}
@@ -268,92 +598,97 @@ export default function Acomptes() {
                 ))}
               </div>
             )}
-          </section>
+          </Card>
 
           {s.creation.length > 0 && (
-            <section className="acomptes-section acompte-creation-section">
-              <div className="section-header">
-                <div><span className="acomptes-section-kicker">Debut d'activite</span>
-                  <h2><LuFileText aria-hidden="true" /> Acompte de creation</h2></div>
-                <span className="section-badge">{s.creation.length} acompte(s)</span>
-              </div>
-              <div className="acomptes-provisionnels-grid">
-                {s.creation.map((acompte) => (
-                  <article className="acompte-card acompte-card--creation" key={acompte.idAcompte}>
-                    <header className="acompte-card-header">
-                      <div className="acompte-card-heading">
-                        <span className="acompte-card-icon"><LuFileText aria-hidden="true" /></span>
-                        <div><span className="acompte-card-overline">Annee {acompte.annee}</span>
-                          <h3 className="acompte-card-title">Acompte de debut d'activite</h3></div>
-                      </div>
-                      <span className={'badge ' + (acompte.statut === 'PAYE' ? 'badge-actif' : 'badge-a_payer')}>{acompte.statut}</span>
-                    </header>
-                    <div className="acompte-card-body">
-                      <div className="acompte-detail-ligne"><span>Date</span><strong>{acompte.dateEcheance || '-'}</strong></div>
-                      <div className="acompte-total-ligne"><span>Montant</span><strong>{fmt(acompte.montantAr)} Ar</strong></div>
-                    </div>
-                  </article>
-                ))}
-              </div>
-            </section>
+            <Card
+              title={
+                <span>
+                  <FileTextOutlined style={{ color: '#7C3AED', marginRight: 8 }} />
+                  Acomptes de creation
+                </span>
+              }
+              extra={<Text type="secondary">{s.creation.length} acompte(s)</Text>}
+            >
+              <Table
+                rowKey="idAcompte"
+                size="small"
+                columns={colonnesCreation}
+                dataSource={s.creation}
+                pagination={false}
+                scroll={{ x: 640 }}
+              />
+            </Card>
           )}
 
-          <section className="acomptes-section douane-section">
-            <div className="section-header douane-header">
-              <div><span className="acomptes-section-kicker">AIRS · Retenue de 2 %</span>
-                <h2><LuPackage aria-hidden="true" /> Acomptes douaniers</h2></div>
-              <div className="section-stats">
-                <span>Total encaisse <strong>{fmt(totalDouane)} Ar</strong></span>
-                <span>{s.douane.length} quittance(s)</span>
-              </div>
-            </div>
-            <button className="btn btn-primary btn-add-douane" onClick={() => setDouaneOuvert(true)}>
-              <LuPlus aria-hidden="true" /> Enregistrer une quittance douaniere
-            </button>
+          <Card
+            title={
+              <span>
+                <ContainerOutlined style={{ color: '#EA580C', marginRight: 8 }} />
+                Acomptes douaniers - AIRS 2 %
+              </span>
+            }
+            extra={
+              <Space wrap size={12}>
+                <Text type="secondary">
+                  Total encaisse : <Text strong>{formatAr(totalDouane)}</Text>
+                </Text>
+                <Button
+                  type="primary"
+                  icon={<PlusOutlined />}
+                  onClick={() => setDouaneOuvert(true)}
+                >
+                  Enregistrer une quittance
+                </Button>
+              </Space>
+            }
+          >
             {s.douane.length > 0 ? (
-              <div className="table-container acomptes-table-container">
-                <table className="data-table acomptes-table">
-                  <thead><tr><th>Date</th><th>Reference douane</th><th>Valeur CAF</th><th>Taux</th><th>Montant</th><th>Statut</th></tr></thead>
-                  <tbody>{s.douane.map((acompte) => (
-                    <tr key={acompte.idAcompte}>
-                      <td>{acompte.dateEcheance}</td><td>{acompte.referenceDouane || '-'}</td>
-                      <td>{fmt(acompte.baseIrN1)} Ar</td><td>{acompte.tauxPct} %</td>
-                      <td><strong>{fmt(acompte.montantAr)} Ar</strong></td>
-                      <td><span className="badge badge-actif">{acompte.statut}</span></td>
-                    </tr>
-                  ))}</tbody>
-                </table>
-              </div>
+              <Table
+                rowKey="idAcompte"
+                size="small"
+                columns={colonnesDouane}
+                dataSource={s.douane}
+                pagination={false}
+                scroll={{ x: 780 }}
+              />
             ) : (
-              <div className="acomptes-inline-empty acomptes-inline-empty--compact">
-                <LuShip aria-hidden="true" /><span>Aucune quittance de douane enregistree pour {annee}.</span>
-              </div>
+              <EmptyState
+                titre="Aucune quittance de douane"
+                texte={`Aucune quittance enregistree pour l exercice ${annee}.`}
+              />
             )}
-          </section>
+          </Card>
 
-          <section className="acomptes-section">
-            <div className="section-header">
-              <div><span className="acomptes-section-kicker">Estimation</span>
-                <h2><LuTrendingUp aria-hidden="true" /> Simulateur d'atterrissage fiscal</h2></div>
-            </div>
-            <SimulateurLiquidation cumulAcomptes={cumulVerse} />
-          </section>
+          <Card
+            title={
+              <span>
+                <RiseOutlined style={{ color: '#0E7A55', marginRight: 8 }} />
+                Simulateur d&apos;atterrissage fiscal
+              </span>
+            }
+          >
+            <SimulateurLiquidation cumulAcomptes={s.cumulVerse || 0} />
+          </Card>
 
-          <section className="acomptes-section">
-            <div className="section-header">
-              <div><span className="acomptes-section-kicker">Historique fiscal</span>
-                <h2><LuClock3 aria-hidden="true" /> Chronologie des paiements</h2></div>
-              <span className="section-badge">{chronologie.length} exercice(s)</span>
-            </div>
+          <Card
+            title={
+              <span>
+                <ClockCircleOutlined style={{ color: '#F59E0B', marginRight: 8 }} />
+                Chronologie des paiements
+              </span>
+            }
+            extra={<Text type="secondary">{chronologie.length} exercice(s)</Text>}
+          >
             <ChronologiePaiements
               anneeCreation={anneeCreation}
               annee={annee}
-              irN1={s.irN1}
-              acomptesVerses={s.cumulVerse}
+              irN1={s.irN1 || 0}
+              acomptesVerses={s.cumulVerse || 0}
               chronologie={chronologie}
             />
-          </section>
-        </div>
+          </Card>
+        </>
       )}
 
       <AcompteDouaneModal
@@ -368,7 +703,10 @@ export default function Acomptes() {
         message={confirm ? confirm.message : ''}
         texteConfirmer={confirm ? confirm.texteConfirmer : 'Confirmer'}
         danger={confirm ? !!confirm.danger : false}
-        onConfirmer={() => { if (confirm && confirm.onConfirmer) confirm.onConfirmer(); setConfirm(null); }}
+        onConfirmer={() => {
+          if (confirm && confirm.onConfirmer) confirm.onConfirmer();
+          setConfirm(null);
+        }}
         onAnnuler={() => setConfirm(null)}
       />
     </div>

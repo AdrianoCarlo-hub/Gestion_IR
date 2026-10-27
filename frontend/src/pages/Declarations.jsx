@@ -1,17 +1,19 @@
 import { useEffect, useState } from 'react';
+import { Button, InputNumber, Select, Space, Table, Tag, Typography } from 'antd';
+import { PlusOutlined, FileExcelOutlined, ReloadOutlined, ExportOutlined } from '@ant-design/icons';
 import { useAuth } from '../context/AuthContext';
+import { useToast } from '../context/ToastContext';
 import SearchBar from '../components/SearchBar';
 import { lister as listerContribuables } from '../services/contribuableService';
 import * as service from '../services/declarationService';
+import * as exportService from '../services/exportService';
 import DeclarationForm from './DeclarationForm';
 import ContribuableRecherche from '../components/ContribuableRecherche';
-import { LuPlus } from 'react-icons/lu';
+import { formatAr, STATUT_DECLARATION } from '../utils/format';
 
+const { Text } = Typography;
 const anneeCourante = new Date().getFullYear();
 const SEUIL_REEL_OBLIGATOIRE = 400000000;
-
-const fmt = (n) =>
-  n == null ? '0' : Number(n).toLocaleString('fr-FR').replace(/\u202f|\u00a0/g, ' ');
 
 const normaliserRecherche = (valeur) =>
   String(valeur ?? '')
@@ -21,31 +23,32 @@ const normaliserRecherche = (valeur) =>
 
 export default function Declarations() {
   const { agent } = useAuth();
+  const toast = useToast();
   const [liste, setListe] = useState([]);
   const [contribuables, setContribuables] = useState([]);
   const [recherche, setRecherche] = useState('');
+  const [filtreStatut, setFiltreStatut] = useState('TOUS');
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
-  const [success, setSuccess] = useState('');
   const [mode, setMode] = useState('liste');
   const [idEnEdition, setIdEnEdition] = useState(null);
   const [nouveauContribuable, setNouveauContribuable] = useState('');
   const [nouvelleAnnee, setNouvelleAnnee] = useState(anneeCourante);
+  const [exporting, setExporting] = useState(false);
 
   const charger = async () => {
     setLoading(true);
-    setError('');
     try {
       const data = await service.lister();
       setListe(data);
     } catch (e) {
-      setError(e.response?.data?.message || 'Erreur de chargement');
+      toast.error(e.response?.data?.message || 'Erreur de chargement');
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     charger();
     listerContribuables().then(setContribuables).catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -53,14 +56,12 @@ export default function Declarations() {
 
   const handleNouvelle = () => {
     if (contribuables.length === 0) {
-      setError('Aucun contribuable disponible. Creez-en un d abord.');
+      toast.warning('Aucun contribuable disponible. Creez-en un d abord.');
       return;
     }
     setNouveauContribuable(String(contribuables[0].idContribuable));
     setNouvelleAnnee(anneeCourante);
     setMode('nouveau');
-    setError('');
-    setSuccess('');
   };
 
   const contribuableSelectionne = contribuables.find(
@@ -81,21 +82,15 @@ export default function Declarations() {
     return null;
   })();
 
-  const handleCreerDeclaration = async (e) => {
-    e.preventDefault();
-    setError('');
-    setSuccess('');
-
+  const handleCreerDeclaration = async () => {
     if (!nouveauContribuable) {
-      setError('Contribuable obligatoire');
+      toast.error('Contribuable obligatoire');
       return;
     }
-
     if (erreurAnnee) {
-      setError(erreurAnnee);
+      toast.error(erreurAnnee);
       return;
     }
-
     try {
       const payload = {
         idContribuable: Number(nouveauContribuable),
@@ -107,17 +102,15 @@ export default function Declarations() {
       const d = await service.creer(payload);
       setIdEnEdition(d.idDeclaration);
       setMode('editer');
-      setSuccess('Declaration creee (brouillon)');
+      toast.success('Declaration creee (brouillon)');
     } catch (err) {
-      setError(err.response?.data?.message || err.message || 'Erreur');
+      toast.error(err.response?.data?.message || err.message || 'Erreur');
     }
   };
 
   const handleOuvrir = (id) => {
     setIdEnEdition(id);
     setMode('editer');
-    setError('');
-    setSuccess('');
   };
 
   const handleRetour = () => {
@@ -126,151 +119,189 @@ export default function Declarations() {
     charger();
   };
 
+  const handleExporter = async () => {
+    setExporting(true);
+    try {
+      await exportService.exportDeclarations();
+      toast.success('Export Excel lance');
+    } catch (e) {
+      toast.error(e.response?.data?.message || 'Erreur d export');
+    } finally {
+      setExporting(false);
+    }
+  };
+
   const termeRecherche = normaliserRecherche(recherche.trim());
-  const listeFiltree = termeRecherche
-    ? liste.filter((d) => {
-        const champs = [
-          d.contribuable?.nif ?? '-',
-          d.contribuable?.raisonSociale ?? '-',
-          d.annee,
-          fmt(d.irDu),
-          d.irDu,
-          fmt(d.soldeAPayer),
-          d.soldeAPayer,
-          d.statut,
-        ];
-        return champs.some((champ) => normaliserRecherche(champ).includes(termeRecherche));
-      })
-    : liste;
+  const listeFiltree = liste.filter((d) => {
+    if (filtreStatut !== 'TOUS' && d.statut !== filtreStatut) return false;
+    if (!termeRecherche) return true;
+    const champs = [
+      d.contribuable?.nif ?? '-',
+      d.contribuable?.raisonSociale ?? '-',
+      d.annee,
+      formatAr(d.irDu),
+      formatAr(d.soldeAPayer),
+      d.statut,
+    ];
+    return champs.some((champ) => normaliserRecherche(champ).includes(termeRecherche));
+  });
+
+  const colonnes = [
+    {
+      title: 'Contribuable',
+      key: 'contribuable',
+      render: (_, d) => (
+        <span style={{ display: 'flex', flexDirection: 'column', lineHeight: 1.25 }}>
+          <Text strong>{d.contribuable?.raisonSociale || '-'}</Text>
+          <Text type="secondary" style={{ fontSize: 12 }}>
+            NIF : {d.contribuable?.nif || '-'}
+          </Text>
+        </span>
+      ),
+    },
+    { title: 'Annee', dataIndex: 'annee', width: 90, align: 'center' },
+    { title: 'CA HT', dataIndex: 'caHt', width: 150, align: 'right', render: formatAr },
+    { title: 'IR du', dataIndex: 'irDu', width: 150, align: 'right', render: formatAr },
+    {
+      title: 'Solde a payer',
+      dataIndex: 'soldeAPayer',
+      width: 160,
+      align: 'right',
+      render: (v) => <Text type={v > 0 ? 'danger' : 'secondary'}>{formatAr(v)}</Text>,
+    },
+    {
+      title: 'Statut',
+      dataIndex: 'statut',
+      width: 130,
+      align: 'center',
+      render: (s) => {
+        const def = STATUT_DECLARATION[s] || { couleur: 'default', libelle: s };
+        return <Tag color={def.couleur}>{def.libelle}</Tag>;
+      },
+    },
+    {
+      title: 'Actions',
+      width: 110,
+      align: 'center',
+      render: (_, d) => (
+        <Button type="link" size="small" onClick={() => handleOuvrir(d.idDeclaration)}>
+          <ExportOutlined /> Ouvrir
+        </Button>
+      ),
+    },
+  ];
+
+  if (mode === 'editer' && idEnEdition) {
+    return (
+      <div className="page">
+        <DeclarationForm idDeclaration={idEnEdition} onRetour={handleRetour} />
+      </div>
+    );
+  }
 
   return (
     <div className="page">
-      <header className="page-header">
-        <h1>Declarations IR</h1>
-        <p className="page-sub">Declaration annuelle avec calcul automatique de l impot</p>
-      </header>
-
-      {error && <div className="alert-error" style={{ marginBottom: 16 }}>{error}</div>}
-      {success && <div className="alert-success" style={{ marginBottom: 16 }}>{success}</div>}
-
-      {mode === 'liste' && (
-        <>
-          <SearchBar
-            value={recherche}
-            onChange={setRecherche}
-            placeholder="Rechercher par NIF, contribuable, annee, montant, statut..."
-          >
-            <button type="button" className="btn-secondary" onClick={handleNouvelle}>
-              <LuPlus size={14} /> Nouvelle declaration
-            </button>
-          </SearchBar>
-
-          <div className="table-container">
-            <table className="data-table">
-              <thead>
-                <tr>
-                  <th>NIF</th>
-                  <th>Contribuable</th>
-                  <th>Annee</th>
-                  <th>IR du</th>
-                  <th>Solde a payer</th>
-                  <th>Statut</th>
-                  <th>Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {loading ? (
-                  <tr><td colSpan={7} style={{ textAlign: 'center' }}>Chargement...</td></tr>
-                ) : listeFiltree.length === 0 ? (
-                  <tr><td colSpan={7} style={{ textAlign: 'center' }}>
-                    {termeRecherche ? 'Aucun resultat pour cette recherche' : 'Aucune declaration'}
-                  </td></tr>
-                ) : (
-                  listeFiltree.map((d) => (
-                    <tr key={d.idDeclaration}>
-                      <td>{d.contribuable ? d.contribuable.nif : '-'}</td>
-                      <td>{d.contribuable ? d.contribuable.raisonSociale : '-'}</td>
-                      <td>{d.annee}</td>
-                      <td>{fmt(d.irDu)} Ar</td>
-                      <td>{fmt(d.soldeAPayer)} Ar</td>
-                      <td>
-                        <span className={'badge badge-' + (d.statut || '').toLowerCase()}>
-                          {d.statut}
-                        </span>
-                      </td>
-                      <td>
-                        <button className="btn-link" onClick={() => handleOuvrir(d.idDeclaration)}>
-                          Ouvrir
-                        </button>
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
-          <p className="table-footer">{listeFiltree.length} resultat(s)</p>
-        </>
-      )}
+      <div className="page-header">
+        <div>
+          <h1 className="page-title">Declarations IR</h1>
+          <p className="page-subtitle">
+            Declaration annuelle avec calcul automatique de l impot
+          </p>
+        </div>
+        <Space>
+          <Button icon={<FileExcelOutlined />} loading={exporting} onClick={handleExporter}>
+            Exporter Excel
+          </Button>
+          <Button icon={<ReloadOutlined />} onClick={charger} loading={loading}>
+            Actualiser
+          </Button>
+        </Space>
+      </div>
 
       {mode === 'nouveau' && (
-        <>
-          <h2 className="form-title">Nouvelle declaration IR</h2>
-          <form className="form-panel" onSubmit={handleCreerDeclaration}>
-            <div className="form-row">
-              <div className="form-group" style={{ flex: 2 }}>
-                <label className="form-label">Contribuable *</label>
-                <ContribuableRecherche
-                  contribuables={contribuables}
-                  value={nouveauContribuable}
-                  onChange={(id) => setNouveauContribuable(id)}
-                />
-                {contribuableSelectionne && (
-                  <span style={{ fontSize: 12, color: '#64748b', marginTop: 4 }}>
-                    Regime : {contribuableSelectionne.regime}
-                    {' — '}
-                    Immatriculation : {contribuableSelectionne.dateImmatriculation}
-                  </span>
-                )}
-              </div>
-              <div className="form-group">
-                <label className="form-label">Annee *</label>
-                <input
-                  type="number"
-                  className={'form-input ' + (erreurAnnee ? 'input-error' : '')}
-                  value={nouvelleAnnee}
-                  onChange={(e) => setNouvelleAnnee(e.target.value)}
-                  min={2000}
-                  max={anneeCourante}
-                />
-                {erreurAnnee && <span className="error-msg">{erreurAnnee}</span>}
-              </div>
-            </div>
-
-            {contribuableSelectionne &&
-             contribuableSelectionne.regime === 'REEL_OBLIGATOIRE' && (
-              <div className="alert-warning" style={{ marginBottom: 12 }}>
-                Regime <strong>REEL OBLIGATOIRE</strong> : le CA HT devra etre
-                &ge; {fmt(SEUIL_REEL_OBLIGATOIRE)} Ar.
-              </div>
-            )}
-
-            <div className="form-actions">
-              <button type="submit" className="btn-primary">Creer la declaration</button>
-              <button type="button" className="btn-secondary" onClick={handleRetour}>
-                Annuler
-              </button>
-            </div>
-          </form>
-        </>
+        <div style={{ marginBottom: 16 }}>
+          <div className="toolbar">
+            <ContribuableRecherche
+              contribuables={contribuables}
+              value={nouveauContribuable}
+              onChange={(id) => setNouveauContribuable(id)}
+            />
+            <InputNumber
+              min={2000}
+              max={anneeCourante}
+              value={nouvelleAnnee}
+              onChange={(v) => setNouvelleAnnee(v ?? anneeCourante)}
+              addonAfter="Annee"
+              style={{ width: 160 }}
+              status={erreurAnnee ? 'error' : undefined}
+            />
+            <Button
+              type="primary"
+              icon={<PlusOutlined />}
+              onClick={handleCreerDeclaration}
+              disabled={!nouveauContribuable || !!erreurAnnee}
+            >
+              Creer la declaration
+            </Button>
+            <Button onClick={() => setMode('liste')}>Annuler</Button>
+          </div>
+          {erreurAnnee && (
+            <Text type="danger" style={{ display: 'block', marginBottom: 8 }}>
+              {erreurAnnee}
+            </Text>
+          )}
+          {contribuableSelectionne && (
+            <Text type="secondary" style={{ display: 'block', marginBottom: 8 }}>
+              Regime : REEL OBLIGATOIRE — le CA HT devra etre superieur ou egal a{' '}
+              {formatAr(SEUIL_REEL_OBLIGATOIRE)} — Immatriculation :{' '}
+              {contribuableSelectionne.dateImmatriculation || '-'}
+            </Text>
+          )}
+        </div>
       )}
 
-      {mode === 'editer' && idEnEdition && (
-        <DeclarationForm
-          idDeclaration={idEnEdition}
-          onRetour={handleRetour}
+      <div className="toolbar" style={{ marginBottom: 16 }}>
+        <SearchBar
+          value={recherche}
+          onChange={setRecherche}
+          placeholder="Rechercher par NIF, contribuable, annee, montant, statut..."
         />
-      )}
+        <Select
+          value={filtreStatut}
+          onChange={setFiltreStatut}
+          style={{ width: 190 }}
+          options={[
+            { value: 'TOUS', label: 'Tous les statuts' },
+            ...Object.entries(STATUT_DECLARATION).map(([k, v]) => ({
+              value: k,
+              label: v.libelle,
+            })),
+          ]}
+        />
+        <Button
+          type="primary"
+          icon={<PlusOutlined />}
+          onClick={handleNouvelle}
+          disabled={mode === 'nouveau'}
+        >
+          Nouvelle declaration
+        </Button>
+      </div>
+
+      <div style={{ background: '#fff', padding: 16, borderRadius: 8 }}>
+        <Table
+          rowKey="idDeclaration"
+          columns={colonnes}
+          dataSource={listeFiltree}
+          loading={loading}
+          pagination={{
+            pageSize: 15,
+            showSizeChanger: false,
+            showTotal: (t) => `${t} resultat(s)`,
+          }}
+          size="middle"
+        />
+      </div>
     </div>
   );
 }

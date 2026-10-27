@@ -1,30 +1,45 @@
 import { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
+import { Table, Tag, Button, Select, Space, Alert, Typography } from 'antd';
+import {
+  PlusOutlined,
+  EyeOutlined,
+  EditOutlined,
+  SwapOutlined,
+  FileExcelOutlined,
+} from '@ant-design/icons';
 import { useAuth } from '../context/AuthContext';
 import ContribuableForm from '../components/ContribuableForm';
 import StatutModal from '../components/StatutModal';
 import SearchBar from '../components/SearchBar';
+import { SkeletonTable } from '../components/Spinner';
 import { useToast } from '../context/ToastContext';
 import * as service from '../services/contribuableService';
+import * as exportService from '../services/exportService';
 import * as statutService from '../services/statutService';
-import {
-  LuUser,
-  LuPencil,
-  LuCircleAlert,
-  LuPlus,
-  LuFileText,
-} from 'react-icons/lu';
+
+const { Text } = Typography;
 
 const STATUTS_CONTRIBUABLE = [
-  { value: 'ACTIF',    label: 'Actif',    couleur: '#10b981' },
+  { value: 'ACTIF', label: 'Actif', couleur: '#10b981' },
   { value: 'SUSPENDU', label: 'Suspendu', couleur: '#f59e0b' },
-  { value: 'CESSE',    label: 'Cesse',    couleur: '#64748b' },
-  { value: 'RADIE',    label: 'Radie',    couleur: '#dc2626' },
+  { value: 'CESSE', label: 'Cesse', couleur: '#64748b' },
+  { value: 'RADIE', label: 'Radie', couleur: '#dc2626' },
 ];
+
+const COULEUR_STATUT = {
+  ACTIF: 'green',
+  SUSPENDU: 'orange',
+  CESSE: 'red',
+  RADIE: 'red',
+};
+
+const OPTIONS_STATUT = STATUTS_CONTRIBUABLE.map((s) => ({ value: s.value, label: s.label }));
 
 export default function Contribuables() {
   const { agent } = useAuth();
   const toast = useToast();
+  const navigate = useNavigate();
   const [liste, setListe] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -33,6 +48,7 @@ export default function Contribuables() {
   const [mode, setMode] = useState('liste');
   const [enEdition, setEnEdition] = useState(null);
   const [statutModal, setStatutModal] = useState(null);
+  const [exportLoading, setExportLoading] = useState(false);
 
   const charger = async () => {
     setLoading(true);
@@ -61,6 +77,7 @@ export default function Contribuables() {
   };
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     charger();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -80,24 +97,41 @@ export default function Contribuables() {
     }
   };
 
+  const handleExportExcel = async () => {
+    setExportLoading(true);
+    try {
+      await exportService.exportContribuables();
+      toast.success('Export effectue avec succes');
+    } catch (e) {
+      toast.error(e.response?.data?.message || "Erreur lors de l export");
+    } finally {
+      setExportLoading(false);
+    }
+  };
+
+
   const handleSubmit = async (payload) => {
     try {
       setError('');
       if (enEdition) {
         await service.modifier(enEdition.idContribuable, payload);
         toast.success('Contribuable modifie avec succes');
-      } else {
-        await service.creer({
-          ...payload,
-          centre: { idCentre: 1 },
-          agent: { idAgent: agent?.idAgent || 3 },
-        });
-        toast.success('Contribuable cree avec succes');
+        setMode('liste');
+        charger();
+        return;
       }
+      await service.creer({
+        ...payload,
+        centre: { idCentre: 1 },
+        agent: { idAgent: agent?.idAgent || 3 },
+      });
+      toast.success('Contribuable cree avec succes');
       setMode('liste');
       charger();
     } catch (e) {
-      setError(e.response?.data?.message || 'Erreur');
+      const msg = e.response?.data?.message || 'Erreur';
+      setError(msg);
+      throw e;
     }
   };
 
@@ -111,14 +145,89 @@ export default function Contribuables() {
     }
   };
 
+  const colonnes = [
+    {
+      title: 'NIF',
+      dataIndex: 'nif',
+      key: 'nif',
+      render: (v) => <Text strong>{v}</Text>,
+    },
+    { title: 'Raison sociale', dataIndex: 'raisonSociale', key: 'raisonSociale' },
+    { title: 'Dirigeant', dataIndex: 'nomDirigeant', key: 'nomDirigeant' },
+    {
+      title: 'Secteur',
+      key: 'secteur',
+      render: (_, c) => (c.secteur?.libelle || '-'),
+    },
+    {
+      title: 'Regime',
+      key: 'regime',
+      render: () => <Tag color="blue">Reel obligatoire</Tag>,
+    },
+    {
+      title: 'Statut',
+      dataIndex: 'statut',
+      key: 'statut',
+      render: (v) => <Tag color={COULEUR_STATUT[v] || 'default'}>{v}</Tag>,
+    },
+    {
+      title: 'Actions',
+      key: 'actions',
+      width: 260,
+      render: (_, c) => (
+        <Space size={0} wrap>
+          <Button
+            type="link"
+            size="small"
+            icon={<EyeOutlined />}
+            onClick={() => navigate('/contribuables/' + c.idContribuable)}
+          >
+            Fiche
+          </Button>
+          <Button
+            type="link"
+            size="small"
+            icon={<EditOutlined />}
+            onClick={() => handleEditer(c.idContribuable)}
+          >
+            Modifier
+          </Button>
+          <Button
+            type="link"
+            size="small"
+            icon={<SwapOutlined />}
+            onClick={() =>
+              setStatutModal({
+                id: c.idContribuable,
+                statutActuel: c.statut,
+                nom: c.raisonSociale,
+              })
+            }
+          >
+            Statut
+          </Button>
+        </Space>
+      ),
+    },
+  ];
+
   return (
     <div className="page">
-      <header className="page-header">
-        <h1>Contribuables</h1>
-        <p className="page-sub">Gestion des contribuables soumis a l IR</p>
-      </header>
+      <div className="page-header">
+        <div>
+          <h1 className="page-title">Contribuables</h1>
+          <p className="page-subtitle">Gestion des contribuables soumis a l IR</p>
+        </div>
+          <Button
+            icon={<FileExcelOutlined />}
+            onClick={handleExportExcel}
+            loading={exportLoading}
+          >
+            Exporter Excel
+          </Button>
+      </div>
 
-      {error && <div className="alert-error" style={{ marginBottom: 16 }}>{error}</div>}
+      {error && <Alert type="error" showIcon message={error} style={{ marginBottom: 16 }} />}
 
       {mode === 'liste' && (
         <>
@@ -130,109 +239,51 @@ export default function Contribuables() {
             }}
             placeholder="Recherche (NIF, nom, STAT, telephone)"
           >
-            <select
-              className="form-input"
-              value={statut}
-              onChange={(e) => {
-                setStatut(e.target.value);
-                chargerAvec(motCle, e.target.value);
+            <Select
+              style={{ minWidth: 170 }}
+              value={statut || undefined}
+              placeholder="Tous statuts"
+              allowClear
+              onChange={(v) => {
+                const st = v || '';
+                setStatut(st);
+                chargerAvec(motCle, st);
               }}
-              style={{ maxWidth: 180 }}
-            >
-              <option value="">Tous statuts</option>
-              <option value="ACTIF">Actif</option>
-              <option value="SUSPENDU">Suspendu</option>
-              <option value="CESSE">Cesse</option>
-              <option value="RADIE">Radie</option>
-            </select>
-            <button type="button" className="btn-secondary" onClick={handleNouveau}>
-              <LuPlus size={14} /> Nouveau contribuable
-            </button>
+              options={OPTIONS_STATUT}
+            />
+            <Button type="primary" icon={<PlusOutlined />} onClick={handleNouveau}>
+              Nouveau contribuable
+            </Button>
           </SearchBar>
 
-          <div className="table-container">
-            <table className="data-table">
-              <thead>
-                <tr>
-                  <th>NIF</th>
-                  <th>Raison sociale</th>
-                  <th>Dirigeant</th>
-                  <th>Regime</th>
-                  <th>Statut</th>
-                  <th>Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {loading ? (
-                  <tr><td colSpan={6} style={{ textAlign: 'center' }}>Chargement...</td></tr>
-                ) : liste.length === 0 ? (
-                  <tr><td colSpan={6} style={{ textAlign: 'center' }}>Aucun contribuable</td></tr>
-                ) : (
-                  liste.map((c) => (
-                    <tr key={c.idContribuable}>
-                      <td><strong>{c.nif}</strong></td>
-                      <td>{c.raisonSociale}</td>
-                      <td>{c.nomDirigeant}</td>
-                      <td>{c.regime === 'REEL_OBLIGATOIRE' ? 'Reel oblig.' : 'Reel option'}</td>
-                      <td>
-                        <span className={'badge badge-' + (c.statut || '').toLowerCase()}>
-                          {c.statut}
-                        </span>
-                      </td>
-                      <td>
-                        <Link
-                          className="btn-link"
-                          to={'/contribuables/' + c.idContribuable}
-                          title="Voir la fiche"
-                          style={{ marginRight: 12, display: 'inline-flex', alignItems: 'center', gap: 4 }}
-                        >
-                          <LuUser size={14} /> Fiche
-                        </Link>
-                        <button
-                          className="btn-link"
-                          onClick={() => handleEditer(c.idContribuable)}
-                          title="Modifier"
-                          style={{ marginRight: 12, display: 'inline-flex', alignItems: 'center', gap: 4 }}
-                        >
-                          <LuPencil size={14} /> Modifier
-                        </button>
-                        <button
-                          className="btn-link"
-                          onClick={() =>
-                            setStatutModal({
-                              id: c.idContribuable,
-                              statutActuel: c.statut,
-                              nom: c.raisonSociale,
-                            })
-                          }
-                          title="Changer le statut"
-                          style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}
-                        >
-                          <LuCircleAlert size={14} /> Statut
-                        </button>
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
-
-          <p className="table-footer">{liste.length} resultat(s)</p>
+          {loading ? (
+            <SkeletonTable rows={5} cols={7} />
+          ) : (
+            <Table
+              rowKey="idContribuable"
+              columns={colonnes}
+              dataSource={liste}
+              scroll={{ x: 900 }}
+              pagination={{
+                pageSize: 10,
+                showSizeChanger: false,
+                showTotal: (total) => total + ' resultat(s)',
+              }}
+              locale={{ emptyText: 'Aucun contribuable' }}
+            />
+          )}
         </>
       )}
 
       {mode === 'form' && (
-        <>
-          <h2 className="form-title">
-            {enEdition ? 'Modifier un contribuable' : 'Nouveau contribuable'}
-          </h2>
-          <ContribuableForm
-            initial={enEdition}
-            onSubmit={handleSubmit}
-            onCancel={() => { setMode('liste'); setEnEdition(null); }}
-          />
-        </>
+        <ContribuableForm
+          initial={enEdition}
+          onSubmit={handleSubmit}
+          onCancel={() => {
+            setMode('liste');
+            setEnEdition(null);
+          }}
+        />
       )}
 
       <StatutModal

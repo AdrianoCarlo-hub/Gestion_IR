@@ -47,6 +47,15 @@ public class DeclarationIR {
     @Column(name = "total_reintegrations", nullable = false)
     private Long totalReintegrations;
 
+    @Column(name = "reintegrations_manuelles", nullable = false)
+    private Long reintegrationsManuelles = 0L;
+
+    @Column(name = "penalite_due_ar", nullable = false)
+    private Long penaliteDueAr = 0L;
+
+    @Column(name = "premier_acompte_ar", nullable = false)
+    private Long premierAcompteAr = 0L;
+
     @Column(name = "total_deductions", nullable = false)
     private Long totalDeductions;
 
@@ -169,6 +178,30 @@ public class DeclarationIR {
 
     public void setTotalReintegrations(Long totalReintegrations) {
         this.totalReintegrations = totalReintegrations;
+    }
+
+    public Long getReintegrationsManuelles() {
+        return reintegrationsManuelles;
+    }
+
+    public void setReintegrationsManuelles(Long reintegrationsManuelles) {
+        this.reintegrationsManuelles = reintegrationsManuelles;
+    }
+
+    public Long getPenaliteDueAr() {
+        return penaliteDueAr;
+    }
+
+    public void setPenaliteDueAr(Long penaliteDueAr) {
+        this.penaliteDueAr = penaliteDueAr;
+    }
+
+    public Long getPremierAcompteAr() {
+        return premierAcompteAr;
+    }
+
+    public void setPremierAcompteAr(Long premierAcompteAr) {
+        this.premierAcompteAr = premierAcompteAr;
     }
 
     public Long getTotalDeductions() {

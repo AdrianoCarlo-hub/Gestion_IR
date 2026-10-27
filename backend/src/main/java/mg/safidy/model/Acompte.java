@@ -43,6 +43,9 @@ public class Acompte {
     @Column(name = "date_echeance", nullable = false)
     private LocalDate dateEcheance;
 
+    @Column(name = "date_paiement")
+    private LocalDate datePaiement;
+
     @Column(name = "statut", nullable = false, length = 20)
     private String statut;
 
@@ -120,6 +123,14 @@ public class Acompte {
 
     public void setDateEcheance(LocalDate dateEcheance) {
         this.dateEcheance = dateEcheance;
+    }
+
+    public LocalDate getDatePaiement() {
+        return datePaiement;
+    }
+
+    public void setDatePaiement(LocalDate datePaiement) {
+        this.datePaiement = datePaiement;
     }
 
     public String getStatut() {

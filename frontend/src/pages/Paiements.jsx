@@ -1,120 +1,278 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import {
+  Alert,
+  Button,
+  Card,
+  Col,
+  DatePicker,
+  Form,
+  Input,
+  Modal,
+  Row,
+  Segmented,
+  Select,
+  Space,
+  Statistic,
+  Steps,
+  Table,
+  Tag,
+  Tooltip,
+  Typography,
+} from 'antd';
+import {
+  ArrowLeftOutlined,
+  ArrowRightOutlined,
+  CheckOutlined,
+  CloseCircleOutlined,
+  CloseOutlined,
+  CreditCardOutlined,
+  DeleteOutlined,
+  DownloadOutlined,
+  PlusOutlined,
+  PrinterOutlined,
+  UserOutlined,
+  WalletOutlined,
+} from '@ant-design/icons';
+import dayjs from 'dayjs';
 import { useAuth } from '../context/AuthContext';
 import SearchBar from '../components/SearchBar';
 import ContribuableRecherche from '../components/ContribuableRecherche';
+import ConfirmDialog from '../components/ConfirmDialog';
+import EmptyState from '../components/EmptyState';
+import { LoadingBlock, SkeletonTable } from '../components/Spinner';
+import { useToast } from '../context/ToastContext';
 import { lister as listerContribuables } from '../services/contribuableService';
 import { lister as listerDeclarations } from '../services/declarationService';
 import * as service from '../services/paiementService';
 import * as exportService from '../services/exportService';
-import ConfirmDialog from '../components/ConfirmDialog';
-import { useToast } from '../context/ToastContext';
-import { SkeletonTable } from '../components/Spinner';
-import { LuPlus, LuDownload, LuUser, LuFileText, LuCreditCard, LuCalendar, LuDollarSign, LuTriangleAlert, LuX, LuTrash2, LuPrinter } from "react-icons/lu";
+import { formatAr, formatDate } from '../utils/format';
 
-const fmt = (n) => (n == null ? '0' : Number(n).toLocaleString('fr-FR').replace(/\u202f|\u00a0/g, ' '));
-const today = new Date().toISOString().slice(0, 10);
+const { Text } = Typography;
+
+const MODES = [
+  { value: 'VIREMENT', label: 'Virement' },
+  { value: 'CHEQUE', label: 'Cheque' },
+  { value: 'ESPECES', label: 'Especes' },
+  { value: 'MOBILE_MONEY', label: 'Mobile Money' },
+];
+
+const ETAPES = [
+  { title: 'Reglement', content: 'Contribuable et type' },
+  { title: 'Paiement', content: 'Date et mode' },
+  { title: 'Confirmation', content: 'Recapitulatif' },
+];
+
+const libelleReglement = (v) => (v === '2EME_ACOMPTE' ? '2e acompte' : 'Solde total (TOUS)');
+
+const couleurReglement = (v) => (v === '2EME_ACOMPTE' ? 'orange' : 'blue');
+
+function lignesRecap(r) {
+  if (r.typeReglement === '2EME_ACOMPTE') {
+    return [
+      { label: `Acompte 2 (50 % de l'IR ${r.annee})`, valeur: formatAr(r.acompte2) },
+      { label: 'Interets de retard (1 %/mois commence)', valeur: formatAr(r.interetRetard) },
+      { label: 'Echeance', valeur: formatDate(r.echeance) },
+      { label: 'Total a payer', valeur: formatAr(r.total), total: true },
+    ];
+  }
+  const lignes = [
+    { label: 'IR du', valeur: formatAr(r.irDu) },
+    { label: 'Penalites dues', valeur: formatAr(r.penalites) },
+    { label: `1er acompte ${r.annee + 1} (50 % de l'IR)`, valeur: formatAr(r.premierAcompte) },
+    { label: 'Acomptes verses (deduction)', valeur: `- ${formatAr(r.acomptesVerses)}`, deduction: true },
+    { label: 'Total a payer', valeur: formatAr(r.total), total: true },
+  ];
+  if (r.credit > 0) {
+    lignes.push({ label: "Credit d'impot", valeur: formatAr(r.credit) });
+  }
+  return lignes;
+}
 
 export default function Paiements() {
   const { agent } = useAuth();
   const toast = useToast();
-  const [confirm, setConfirm] = useState(null);
+
   const [liste, setListe] = useState([]);
-  const [listeFiltree, setListeFiltree] = useState([]);
   const [contribuables, setContribuables] = useState([]);
   const [declarations, setDeclarations] = useState([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
-  const [showForm, setShowForm] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [erreur, setErreur] = useState('');
   const [recherche, setRecherche] = useState('');
+  const [idContribuable, setIdContribuable] = useState('');
+  const [confirm, setConfirm] = useState(null);
+  const [annulation, setAnnulation] = useState(null);
+  const [dernierPaiement, setDernierPaiement] = useState(null);
+  const [quittanceLoading, setQuittanceLoading] = useState(false);
 
-  const [form, setForm] = useState({
-    idContribuable: '',
-    idDeclaration: '',
-    typePaiement: 'SOLDE_IR',
-    montantAr: '',
-    datePaiement: today,
-    mode: 'VIREMENT',
-  });
+  const [wizard, setWizard] = useState(false);
+  const [etape, setEtape] = useState(0);
+  const [typeReglement, setTypeReglement] = useState('TOUS');
+  const [idDeclaration, setIdDeclaration] = useState('');
+  const [datePaiement, setDatePaiement] = useState(() => dayjs());
+  const [mode, setMode] = useState('VIREMENT');
+  const [recap, setRecap] = useState(null);
+  const [recapErreur, setRecapErreur] = useState('');
+  const [erreurWizard, setErreurWizard] = useState('');
+  const [enCours, setEnCours] = useState(false);
 
-  const charger = async () => {
-    setLoading(true);
-    try {
-      const data = await service.lister();
-      setListe(data);
-      setListeFiltree(data);
-    } catch (e) {
-      setError(e.response?.data?.message || 'Erreur');
-    } finally {
-      setLoading(false);
-    }
+  const recharger = () => {
+    service
+      .lister()
+      .then((data) => setListe(data))
+      .catch((e) => setErreur(e.response?.data?.message || 'Erreur'));
   };
 
   useEffect(() => {
-    charger();
     listerContribuables().then(setContribuables).catch(() => {});
     listerDeclarations().then(setDeclarations).catch(() => {});
+    service
+      .lister()
+      .then((data) => setListe(data))
+      .catch((e) => setErreur(e.response?.data?.message || 'Erreur'))
+      .finally(() => setLoading(false));
   }, []);
 
-  useEffect(() => {
-    if (!recherche) {
-      setListeFiltree(liste);
-      return;
-    }
-    const r = recherche.toLowerCase();
-    setListeFiltree(
-      liste.filter((p) =>
+  const listeFiltree = useMemo(() => {
+    const r = recherche.trim().toLowerCase();
+    return liste.filter((p) => {
+      if (idContribuable && String(p.contribuable?.idContribuable) !== String(idContribuable)) {
+        return false;
+      }
+      if (!r) return true;
+      return (
         (p.referenceQuittance || '').toLowerCase().includes(r) ||
         (p.contribuable?.raisonSociale || '').toLowerCase().includes(r) ||
         (p.contribuable?.nif || '').includes(r)
-      )
-    );
-  }, [recherche, liste]);
+      );
+    });
+  }, [liste, recherche, idContribuable]);
 
-  const setF = (k, v) => setForm((f) => ({ ...f, [k]: v }));
+  const declarationsDuContribuable = useMemo(
+    () =>
+      declarations.filter(
+        (d) => String(d.contribuable?.idContribuable) === String(idContribuable)
+      ),
+    [declarations, idContribuable]
+  );
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    setError('');
-    if (!form.idContribuable) {
-      setError('Contribuable obligatoire');
-      return;
-    }
-    if (!form.montantAr || Number(form.montantAr) <= 0) {
-      setError('Montant obligatoire et > 0');
-      return;
-    }
+  const optionsDeclarations = declarationsDuContribuable.map((d) => ({
+    value: String(d.idDeclaration),
+    label: `${d.annee} - IR ${formatAr(d.irDu)} - solde ${formatAr(d.soldeAPayer)} (${
+      d.statut || '-'
+    })`,
+  }));
+
+  useEffect(() => {
+    if (!wizard || etape !== 2 || !idDeclaration) return undefined;
+    let ignore = false;
+    service
+      .recap(Number(idDeclaration), typeReglement, datePaiement.format('YYYY-MM-DD'))
+      .then((data) => {
+        if (!ignore) setRecap(data);
+      })
+      .catch((e) => {
+        if (ignore) return;
+        setRecap(null);
+        setRecapErreur(
+          e.response?.data?.message || 'Erreur lors du chargement du recapitulatif'
+        );
+      });
+    return () => {
+      ignore = true;
+    };
+  }, [wizard, etape, idDeclaration, typeReglement, datePaiement]);
+
+  const ouvrirWizard = () => {
+    setEtape(0);
+    setTypeReglement('TOUS');
+    setIdDeclaration('');
+    setDatePaiement(dayjs());
+    setMode('VIREMENT');
+    setRecap(null);
+    setRecapErreur('');
+    setErreurWizard('');
+    setWizard(true);
+  };
+
+  const fermerWizard = () => {
+    setWizard(false);
+    setRecap(null);
+    setRecapErreur('');
+    setErreurWizard('');
+  };
+
+  const allerEtape = (n) => {
+    setEtape(n);
+    setRecap(null);
+    setRecapErreur('');
+    setErreurWizard('');
+  };
+
+  const peutSuivant = etape === 0 ? !!idContribuable && !!idDeclaration : !!datePaiement && !!mode;
+
+  const confirmer = async () => {
+    setEnCours(true);
+    setErreurWizard('');
     try {
-      const payload = {
-        idContribuable: Number(form.idContribuable),
-        idDeclaration: form.idDeclaration ? Number(form.idDeclaration) : null,
-        typePaiement: form.typePaiement,
-        montantAr: Number(form.montantAr),
-        datePaiement: form.datePaiement,
-        mode: form.mode,
+      const paiement = await service.enregistrer({
+        idContribuable: Number(idContribuable),
+        idDeclaration: Number(idDeclaration),
+        typeReglement,
+        datePaiement: datePaiement.format('YYYY-MM-DD'),
+        mode,
         idAgent: agent ? agent.idAgent : 3,
-      };
-      await service.enregistrer(payload);
+      });
+      if (paiement && paiement.idPaiement) {
+        setDernierPaiement(paiement);
+      }
       toast.success('Paiement enregistre');
-      setShowForm(false);
-      setForm({ ...form, montantAr: '', idDeclaration: '' });
-      charger();
+      fermerWizard();
+      recharger();
       listerDeclarations().then(setDeclarations).catch(() => {});
-    } catch (err) {
-      toast.error(err.response?.data?.message || 'Erreur');
+    } catch (e) {
+      const message = e.response?.data?.message || 'Erreur';
+      toast.error(message);
+      setErreurWizard(message);
+    } finally {
+      setEnCours(false);
     }
   };
 
-  const handleAnnuler = (id) => {
+  const handleImprimerQuittance = async (id) => {
+    if (!id) {
+      toast.error("Impossible de retrouver la quittance");
+      return;
+    }
+    setQuittanceLoading(true);
+    try {
+      await exportService.exportQuittancePdf(id);
+      toast.success('Quittance telechargee');
+    } catch (e) {
+      toast.error(e.response?.data?.message || "Erreur lors du telechargement");
+    } finally {
+      setQuittanceLoading(false);
+    }
+  };
+
+  const demanderAnnulation = (p) =>
+    setAnnulation({ id: p.idPaiement, reference: p.referenceQuittance, motif: '' });
+
+  const validerAnnulation = () => {
+    if (!annulation || !annulation.motif.trim()) return;
+    const { id, motif, reference } = annulation;
+    setAnnulation(null);
     setConfirm({
       titre: 'Annuler le paiement',
-      message: 'Voulez-vous vraiment annuler ce paiement ? Cette action est irreversible.',
+      message: `Voulez-vous vraiment annuler la quittance ${
+        reference || '-'
+      } ? Cette action est irreversible.`,
       texteConfirmer: 'Annuler le paiement',
       danger: true,
       onConfirmer: async () => {
         try {
-          await service.annuler(id, 'Annulation manuelle');
+          await service.annuler(id, motif.trim());
           toast.success('Paiement annule');
-          charger();
+          recharger();
         } catch (e) {
           toast.error(e.response?.data?.message || 'Erreur');
         }
@@ -122,298 +280,438 @@ export default function Paiements() {
     });
   };
 
-  const declarationsDuContribuable = declarations.filter(
-    (d) => String(d.contribuable?.idContribuable) === String(form.idContribuable)
-  );
-  const declarationsSuivies = declarations.filter(
-    (d) => ['BROUILLON', 'PAYEE'].includes(d.statut)
-  );
-
   const totalMontant = liste.reduce((sum, p) => sum + (p.montantAr || 0), 0);
-  const paiementsValides = liste.filter(p => !p.annule).length;
-  const paiementsAnnules = liste.filter(p => p.annule).length;
+  const paiementsValides = liste.filter((p) => !p.annule).length;
+  const paiementsAnnules = liste.filter((p) => p.annule).length;
+
+  const colonnes = [
+    {
+      title: 'Date',
+      dataIndex: 'datePaiement',
+      key: 'date',
+      width: 110,
+      render: (v) => formatDate(v),
+    },
+    {
+      title: 'Contribuable',
+      key: 'contribuable',
+      render: (_, p) =>
+        p.contribuable ? (
+          <>
+            <div>{p.contribuable.raisonSociale}</div>
+            <div className="muted" style={{ fontSize: 12 }}>
+              NIF {p.contribuable.nif}
+            </div>
+          </>
+        ) : (
+          '-'
+        ),
+    },
+    {
+      title: 'Quittance',
+      dataIndex: 'referenceQuittance',
+      key: 'quittance',
+      render: (v) => <Text strong>{v || '-'}</Text>,
+    },
+    {
+      title: 'Reglement',
+      key: 'reglement',
+      width: 150,
+      render: (_, p) => (
+        <Tag color={couleurReglement(p.typeReglement)}>{p.typeReglement || 'TOUS'}</Tag>
+      ),
+    },
+    {
+      title: 'Mode',
+      dataIndex: 'mode',
+      key: 'mode',
+      width: 130,
+      render: (v) => v || '-',
+    },
+    {
+      title: 'Montant',
+      dataIndex: 'montantAr',
+      key: 'montant',
+      align: 'right',
+      width: 140,
+      render: (v) => <Text strong>{formatAr(v)}</Text>,
+    },
+    {
+      title: 'Agent',
+      key: 'agent',
+      render: (_, p) =>
+        p.agent ? `${p.agent.prenom || ''} ${p.agent.nom || ''}`.trim() : '-',
+    },
+    {
+      title: 'Actions',
+      key: 'actions',
+      width: 190,
+      render: (_, p) => (
+        <Space size={4}>
+          <Button
+            size="small"
+            icon={<PrinterOutlined />}
+            onClick={() => exportService.exportQuittancePdf(p.idPaiement)}
+          >
+            Quittance
+          </Button>
+          {p.annule ? (
+            <Tag color="default">Annule</Tag>
+          ) : (
+            <Tooltip title="Annuler le paiement">
+              <Button
+                size="small"
+                danger
+                type="text"
+                icon={<DeleteOutlined />}
+                onClick={() => demanderAnnulation(p)}
+              />
+            </Tooltip>
+          )}
+        </Space>
+      ),
+    },
+  ];
 
   return (
     <div className="page">
       <header className="page-header">
         <div>
-          <h1>Paiements</h1>
-          <p className="page-sub">Enregistrement des paiements et quittances</p>
+          <h1 className="page-title">Paiements</h1>
+          <p className="page-subtitle">Enregistrement des paiements et quittances</p>
         </div>
       </header>
 
-      {error && (
-        <div className="alert alert-error" style={{ marginBottom: 16 }}>
-          <span className="alert-icon">
-            <LuTriangleAlert className="icon" />
-          </span>
-          <span>{error}</span>
-        </div>
+      {erreur && (
+        <Alert type="error" showIcon message={erreur} closable onClose={() => setErreur('')} />
       )}
+
+      {dernierPaiement && (
+        <Alert
+          type="success"
+          showIcon
+          message="Paiement enregistre avec succes"
+          closable
+          onClose={() => setDernierPaiement(null)}
+          action={
+            <Button
+              size="small"
+              icon={<PrinterOutlined />}
+              loading={quittanceLoading}
+              onClick={() => handleImprimerQuittance(dernierPaiement.idPaiement)}
+            >
+              Imprimer la quittance
+            </Button>
+          }
+        />
+      )}
+
+
+      <div className="toolbar">
+        <div style={{ flex: '1 1 300px', maxWidth: 460 }}>
+          <ContribuableRecherche
+            contribuables={contribuables}
+            value={idContribuable}
+            onChange={(id) => setIdContribuable(id)}
+          />
+        </div>
+        <Space wrap>
+          <Button type="primary" icon={<PlusOutlined />} onClick={ouvrirWizard}>
+            Enregistrer un paiement
+          </Button>
+          <Button icon={<DownloadOutlined />} onClick={() => exportService.exportPaiements()}>
+            Exporter Excel
+          </Button>
+          <Button icon={<PrinterOutlined />} onClick={() => window.print()}>
+            Imprimer
+          </Button>
+        </Space>
+      </div>
 
       <SearchBar
         value={recherche}
         onChange={setRecherche}
         placeholder="Recherche (quittance, contribuable, NIF)"
-      >
-        <button className="btn-primary" onClick={() => setShowForm(!showForm)}>
-          {showForm ? 'Fermer le formulaire' : '+ Nouveau paiement'}
-        </button>
-        <button className="btn-secondary" onClick={() => exportService.exportPaiements()}>
-          Exporter Excel
-        </button>
-      </SearchBar>
+      />
 
-      <div className="cards-grid" style={{ marginBottom: 24 }}>
-        <div className="stat-card">
-          <div className="stat-card-header">
-            <div className="stat-card-icon">
-              <LuCreditCard className="icon" style={{ width: 20, height: 20 }} />
-            </div>
-          </div>
-          <span className="stat-label">Total paiements</span>
-          <span className="stat-value">{liste.length}</span>
-        </div>
-
-        <div className="stat-card financial encaisse">
-          <div className="stat-card-header">
-            <div className="stat-card-icon">
-              <LuDollarSign className="icon" style={{ width: 20, height: 20 }} />
-            </div>
-          </div>
-          <span className="stat-label">Montant total</span>
-          <span className="stat-value">{fmt(totalMontant)} Ar</span>
-        </div>
-
-        <div className="stat-card financial ir-du">
-          <div className="stat-card-header">
-            <div className="stat-card-icon blue">
-              <LuUser className="icon" style={{ width: 20, height: 20 }} />
-            </div>
-          </div>
-          <span className="stat-label">Valides</span>
-          <span className="stat-value">{paiementsValides}</span>
-        </div>
-
-        <div className="stat-card financial reste">
-          <div className="stat-card-header">
-            <div className="stat-card-icon orange">
-              <LuX className="icon" style={{ width: 20, height: 20 }} />
-            </div>
-          </div>
-          <span className="stat-label">Annules</span>
-          <span className="stat-value">{paiementsAnnules}</span>
-        </div>
-      </div>
-
-      <section className="form-panel" style={{ marginBottom: 16 }}>
-        <h3 className="section-title">
-          <LuFileText className="section-icon" />
-          Déclarations à valider et payées
-        </h3>
-        {declarationsSuivies.length === 0 ? (
-          <p style={{ color: '#94a3b8', fontSize: 13 }}>Aucune déclaration à valider ou payée</p>
-        ) : (
-          <div className="table-container">
-            <table className="data-table">
-              <thead>
-                <tr>
-                  <th>NIF</th>
-                  <th>Contribuable</th>
-                  <th>Année</th>
-                  <th>IR dû</th>
-                  <th>Solde à payer</th>
-                  <th>Statut</th>
-                </tr>
-              </thead>
-              <tbody>
-                {declarationsSuivies.map((d) => (
-                  <tr key={d.idDeclaration}>
-                    <td>{d.contribuable?.nif || '-'}</td>
-                    <td>{d.contribuable?.raisonSociale || '-'}</td>
-                    <td>{d.annee}</td>
-                    <td>{fmt(d.irDu)} Ar</td>
-                    <td>{fmt(d.soldeAPayer)} Ar</td>
-                    <td>
-                      <span className={'badge badge-' + (d.statut || '').toLowerCase()}>
-                        {d.statut === 'BROUILLON' ? 'À VALIDER' : 'PAYÉE'}
-                      </span>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-        <p className="table-footer">{declarationsSuivies.length} déclaration(s)</p>
-      </section>
-
-      {showForm && (
-        <form className="form-panel" onSubmit={handleSubmit} style={{ marginBottom: 16 }}>
-          <h3 className="section-title">
-            <LuCreditCard className="section-icon" />
-            Nouveau paiement
-          </h3>
-          <div className="form-row">
-            <div className="form-group" style={{ flex: 2 }}>
-              <label className="form-label required">Contribuable *</label>
-              <ContribuableRecherche
-                contribuables={contribuables}
-                value={form.idContribuable}
-                onChange={(id) => {
-                  setF('idContribuable', id);
-                  setF('idDeclaration', '');
-                }}
-              />
-            </div>
-            <div className="form-group">
-              <label className="form-label">Declaration (optionnel)</label>
-              <select 
-                className="form-select" 
-                value={form.idDeclaration}
-                onChange={(e) => setF('idDeclaration', e.target.value)}
-              >
-                <option value="">-- Aucune --</option>
-                {declarationsDuContribuable.map((d) => (
-                  <option key={d.idDeclaration} value={d.idDeclaration}>
-                    {d.annee} - IR {fmt(d.irDu)} Ar
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
-          <div className="form-row">
-            <div className="form-group">
-              <label className="form-label required">Type *</label>
-              <select 
-                className="form-select" 
-                value={form.typePaiement}
-                onChange={(e) => setF('typePaiement', e.target.value)}
-              >
-                <option value="SOLDE_IR">Solde IR</option>
-                <option value="ACOMPTE">Acompte</option>
-                <option value="PENALITE">Penalite</option>
-              </select>
-            </div>
-            <div className="form-group">
-              <label className="form-label required">Montant (Ar) *</label>
-              <input 
-                type="number" 
-                className="form-input" 
-                value={form.montantAr}
-                onChange={(e) => setF('montantAr', e.target.value)} 
-                min={1} 
-                required 
-              />
-            </div>
-            <div className="form-group">
-              <label className="form-label required">Date *</label>
-              <input 
-                type="date" 
-                className="form-input" 
-                value={form.datePaiement}
-                onChange={(e) => setF('datePaiement', e.target.value)} 
-                required 
-              />
-            </div>
-            <div className="form-group">
-              <label className="form-label required">Mode *</label>
-              <select 
-                className="form-select" 
-                value={form.mode}
-                onChange={(e) => setF('mode', e.target.value)}
-              >
-                <option value="VIREMENT">Virement</option>
-                <option value="CHEQUE">Cheque</option>
-                <option value="ESPECES">Especes</option>
-                <option value="MOBILE_MONEY">Mobile Money</option>
-              </select>
-            </div>
-          </div>
-          <div className="form-actions">
-            <button type="submit" className="btn btn-primary">
-              <LuCreditCard className="icon" />
-              Enregistrer
-            </button>
-            <button type="button" className="btn btn-secondary" onClick={() => setShowForm(false)}>
-              <LuX className="icon" />
-              Annuler
-            </button>
-          </div>
-        </form>
-      )}
+      <Row gutter={[16, 16]}>
+        <Col xs={12} md={6}>
+          <Card>
+            <Statistic
+              title="Total paiements"
+              value={liste.length}
+              prefix={<CreditCardOutlined style={{ color: '#0E7A55' }} />}
+            />
+          </Card>
+        </Col>
+        <Col xs={12} md={6}>
+          <Card>
+            <Statistic
+              title="Montant total"
+              value={totalMontant}
+              suffix="Ar"
+              prefix={<WalletOutlined style={{ color: '#16A34A' }} />}
+              valueStyle={{ color: '#16A34A' }}
+            />
+          </Card>
+        </Col>
+        <Col xs={12} md={6}>
+          <Card>
+            <Statistic
+              title="Valides"
+              value={paiementsValides}
+              prefix={<UserOutlined style={{ color: '#0369A1' }} />}
+            />
+          </Card>
+        </Col>
+        <Col xs={12} md={6}>
+          <Card>
+            <Statistic
+              title="Annules"
+              value={paiementsAnnules}
+              prefix={<CloseCircleOutlined style={{ color: '#DC2626' }} />}
+            />
+          </Card>
+        </Col>
+      </Row>
 
       {loading ? (
         <SkeletonTable rows={5} cols={8} />
       ) : listeFiltree.length === 0 ? (
-        <div className="empty-state">
-          <div className="empty-state-icon">
-            <LuCreditCard className="icon" />
-          </div>
-          <h3>Aucun paiement</h3>
-          <p>Ajoutez un paiement pour commencer</p>
-        </div>
+        <EmptyState
+          icone={<CreditCardOutlined style={{ fontSize: 32, color: '#0E7A55' }} />}
+          titre="Aucun paiement"
+          texte="Ajoutez un paiement pour commencer"
+          action={
+            recherche || idContribuable ? (
+              <Button
+                onClick={() => {
+                  setRecherche('');
+                  setIdContribuable('');
+                }}
+              >
+                Reinitialiser la recherche
+              </Button>
+            ) : null
+          }
+        />
       ) : (
-        <div className="table-container">
-          <table className="data-table">
-            <thead>
-              <tr>
-                <th>Quittance</th>
-                <th>Contribuable</th>
-                <th>Type</th>
-                <th>Montant</th>
-                <th>Date</th>
-                <th>Mode</th>
-                <th>Statut</th>
-                <th>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {listeFiltree.map((p) => (
-                <tr key={p.idPaiement}>
-                  <td><strong>{p.referenceQuittance}</strong></td>
-                  <td>{p.contribuable ? p.contribuable.raisonSociale : '-'}</td>
-                  <td>
-                    <span className="badge badge-info" style={{ fontSize: 11 }}>
-                      {p.typePaiement}
-                    </span>
-                  </td>
-                  <td><strong>{fmt(p.montantAr)} Ar</strong></td>
-                  <td>{p.datePaiement}</td>
-                  <td>{p.mode}</td>
-                  <td>
-                    <span className={'badge badge-' + (p.annule ? 'radie' : 'actif')}>
-                      {p.annule ? 'ANNULE' : 'VALIDE'}
-                    </span>
-                  </td>
-                  <td>
-                    <div className="table-actions">
-                      <button 
-                        className="btn-link"
-                        onClick={() => exportService.exportQuittancePdf(p.idPaiement)}
-                        title="Quittance"
-                      >
-                        <LuPrinter className="icon" style={{ width: 14, height: 14, verticalAlign: 'middle', marginRight: 4 }} />
-                        Quittance
-                      </button>
-                      {!p.annule && (
-                        <button 
-                          className="btn-icon delete"
-                          onClick={() => handleAnnuler(p.idPaiement)}
-                          title="Annuler"
-                        >
-                          <LuTrash2 className="icon" />
-                        </button>
-                      )}
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <Table
+          rowKey="idPaiement"
+          size="medium"
+          columns={colonnes}
+          dataSource={listeFiltree}
+          pagination={{ pageSize: 10, showSizeChanger: true }}
+          locale={{ emptyText: 'Aucun paiement' }}
+        />
       )}
-      <p className="table-footer">{listeFiltree.length} resultat(s)</p>
+
+      <Modal
+        open={wizard}
+        title="Enregistrer un paiement"
+        onCancel={fermerWizard}
+        footer={null}
+        width={700}
+        centered
+        destroyOnHidden
+      >
+        <Steps current={etape} items={ETAPES} style={{ marginBottom: 24 }} />
+
+        {etape === 0 && (
+          <Form layout="vertical">
+            <Form.Item label="Contribuable" required>
+              <ContribuableRecherche
+                contribuables={contribuables}
+                value={idContribuable}
+                onChange={(id) => {
+                  setIdContribuable(id);
+                  setIdDeclaration('');
+                }}
+              />
+            </Form.Item>
+            <Form.Item label="Type de reglement" required>
+              <Segmented
+                block
+                value={typeReglement}
+                onChange={setTypeReglement}
+                options={[
+                  { label: 'Solde total (TOUS)', value: 'TOUS' },
+                  { label: '2e acompte', value: '2EME_ACOMPTE' },
+                ]}
+              />
+            </Form.Item>
+            <Form.Item
+              label="Declaration concernee"
+              required
+              extra={
+                idContribuable
+                  ? undefined
+                  : "Selectionnez d'abord un contribuable pour afficher ses declarations"
+              }
+            >
+              <Select
+                value={idDeclaration || undefined}
+                placeholder="Choisir une declaration"
+                options={optionsDeclarations}
+                onChange={(v) => setIdDeclaration(v)}
+                disabled={!idContribuable}
+                notFoundContent="Aucune declaration pour ce contribuable"
+              />
+            </Form.Item>
+          </Form>
+        )}
+
+        {etape === 1 && (
+          <Form layout="vertical">
+            <Form.Item label="Date du paiement" required>
+              <DatePicker
+                style={{ width: '100%' }}
+                value={datePaiement}
+                onChange={(v) => {
+                  if (v) setDatePaiement(v);
+                }}
+                format="YYYY-MM-DD"
+                allowClear={false}
+                disabledDate={(d) => !!d && d.isAfter(dayjs(), 'day')}
+              />
+            </Form.Item>
+            <Form.Item label="Mode de paiement" required>
+              <Select value={mode} onChange={setMode} options={MODES} />
+            </Form.Item>
+          </Form>
+        )}
+
+        {etape === 2 && (
+          <div>
+            {erreurWizard && (
+              <Alert
+                type="error"
+                showIcon
+                message={erreurWizard}
+                style={{ marginBottom: 12 }}
+              />
+            )}
+            {recapErreur ? (
+              <Alert type="error" showIcon message={recapErreur} />
+            ) : !recap ? (
+              <LoadingBlock message="Chargement du recapitulatif..." />
+            ) : (
+              <Card
+                size="small"
+                title={`Recapitulatif - ${libelleReglement(recap.typeReglement)}`}
+                extra={
+                  <Tag color={couleurReglement(recap.typeReglement)}>
+                    Annee {recap.annee}
+                  </Tag>
+                }
+              >
+                {lignesRecap(recap).map((ligne) => (
+                  <div
+                    key={ligne.label}
+                    style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      gap: 12,
+                      padding: '8px 0',
+                      borderBottom: ligne.total ? 'none' : '1px solid #eef1f0',
+                    }}
+                  >
+                    <span
+                      style={{
+                        fontSize: 13,
+                        color: ligne.deduction ? '#16A34A' : '#6b7f7a',
+                      }}
+                    >
+                      {ligne.label}
+                    </span>
+                    <span
+                      style={{
+                        fontSize: ligne.total ? 15 : 13,
+                        fontWeight: ligne.total ? 700 : 500,
+                        color: ligne.total ? '#0A5E41' : undefined,
+                      }}
+                    >
+                      {ligne.valeur}
+                    </span>
+                  </div>
+                ))}
+              </Card>
+            )}
+          </div>
+        )}
+
+        <div
+          style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            marginTop: 20,
+          }}
+        >
+          <Button
+            icon={etape === 0 ? <CloseOutlined /> : <ArrowLeftOutlined />}
+            onClick={() => (etape === 0 ? fermerWizard() : allerEtape(etape - 1))}
+          >
+            {etape === 0 ? 'Fermer' : 'Precedent'}
+          </Button>
+          {etape < 2 ? (
+            <Button
+              type="primary"
+              disabled={!peutSuivant}
+              onClick={() => allerEtape(etape + 1)}
+            >
+              Suivant <ArrowRightOutlined />
+            </Button>
+          ) : (
+            <Button
+              type="primary"
+              icon={<CheckOutlined />}
+              loading={enCours}
+              disabled={!recap || !!recapErreur}
+              onClick={confirmer}
+            >
+              Confirmer le paiement
+            </Button>
+          )}
+        </div>
+      </Modal>
+
+      <Modal
+        open={!!annulation}
+        title="Motif d'annulation du paiement"
+        onCancel={() => setAnnulation(null)}
+        footer={null}
+        width={460}
+        centered
+        destroyOnHidden
+      >
+        <Form layout="vertical" onFinish={validerAnnulation}>
+          <Form.Item
+            label="Motif de l'annulation"
+            required
+            extra="Le motif est transmis au serveur et journalise."
+          >
+            <Input.TextArea
+              rows={3}
+              value={annulation ? annulation.motif : ''}
+              onChange={(e) =>
+                setAnnulation((a) => (a ? { ...a, motif: e.target.value } : a))
+              }
+              placeholder="Ex : erreur de saisie du mode de paiement..."
+            />
+          </Form.Item>
+          <Space style={{ justifyContent: 'flex-end', width: '100%' }}>
+            <Button onClick={() => setAnnulation(null)}>Annuler</Button>
+            <Button
+              type="primary"
+              danger
+              htmlType="submit"
+              disabled={!annulation || !annulation.motif.trim()}
+            >
+              Continuer
+            </Button>
+          </Space>
+        </Form>
+      </Modal>
 
       <ConfirmDialog
         ouvert={!!confirm}

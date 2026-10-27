@@ -1,5 +1,6 @@
 package mg.safidy.service;
 
+import mg.safidy.dto.DeclarationImpayeeDTO;
 import mg.safidy.dto.DeclarationIRSearchCriteria;
 import mg.safidy.dto.ResultatCalculIR;
 import mg.safidy.exception.BusinessException;
@@ -11,6 +12,7 @@ import mg.safidy.repository.AgentRepository;
 import mg.safidy.repository.ContribuableRepository;
 import mg.safidy.repository.DeclarationIRRepository;
 import mg.safidy.repository.LigneChargeRepository;
+import mg.safidy.repository.PaiementRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -26,12 +28,14 @@ public class DeclarationIRService {
     private static final List<String> CATEGORIES_VALIDES =
         Arrays.asList("SALAIRE", "LOYER", "ELECTRICITE", "TRANSPORT", "AUTRE");
 
-    private static final long SEUIL_REEL_OBLIGATOIRE = 400_000_000L;
+    /** Regle CT4 : CA HT minimal pour un contribuable au regime REEL_OBLIGATOIRE. */
+    private static final long SEUIL_CA_REEL_OBLIGATOIRE = 400_000_000L;
 
     private final DeclarationIRRepository declarationRepository;
     private final ContribuableRepository contribuableRepository;
     private final AgentRepository agentRepository;
     private final LigneChargeRepository ligneChargeRepository;
+    private final PaiementRepository paiementRepository;
     private final AcompteService acompteService;
     private final IRCalculationService irCalculationService;
     private final DeficitService deficitService;
@@ -41,6 +45,7 @@ public class DeclarationIRService {
                                  ContribuableRepository contribuableRepository,
                                  AgentRepository agentRepository,
                                  LigneChargeRepository ligneChargeRepository,
+                                 PaiementRepository paiementRepository,
                                  AcompteService acompteService,
                                  IRCalculationService irCalculationService,
                                  DeficitService deficitService,
@@ -49,6 +54,7 @@ public class DeclarationIRService {
         this.contribuableRepository = contribuableRepository;
         this.agentRepository = agentRepository;
         this.ligneChargeRepository = ligneChargeRepository;
+        this.paiementRepository = paiementRepository;
         this.acompteService = acompteService;
         this.irCalculationService = irCalculationService;
         this.deficitService = deficitService;
@@ -57,6 +63,45 @@ public class DeclarationIRService {
 
     public List<DeclarationIR> lister() {
         return declarationRepository.findAll();
+    }
+
+    /**
+     * Declarations de l'annee impayees : statut VALIDEE ou EN_RETARD avec
+     * un reste a payer (IR du superieur aux paiements enregistres).
+     */
+    public List<DeclarationImpayeeDTO> listerImpayees(Integer annee) {
+        int anneeCible = annee != null ? annee : LocalDate.now().getYear();
+        return declarationRepository.findByAnneeOrderByDateCreationDesc(anneeCible).stream()
+            .map(this::versImpaye)
+            .filter(ligne -> ligne != null)
+            .toList();
+    }
+
+    private DeclarationImpayeeDTO versImpaye(DeclarationIR d) {
+        String statut = d.getStatut();
+        if (!"VALIDEE".equals(statut) && !"EN_RETARD".equals(statut)) {
+            return null;
+        }
+        long irDu = d.getIrDu() == null ? 0L : d.getIrDu();
+        long dejaPaye = Math.min(
+            paiementRepository.sommeRegleeParDeclaration(d.getIdDeclaration()), irDu);
+        long reste = irDu - dejaPaye;
+        if (reste <= 0) {
+            return null;
+        }
+        Contribuable c = d.getContribuable();
+        return new DeclarationImpayeeDTO(
+            d.getIdDeclaration(),
+            d.getAnnee(),
+            c != null ? c.getNif() : null,
+            c != null ? c.getRaisonSociale() : null,
+            c != null ? c.getTelephone() : null,
+            c != null ? c.getEmail() : null,
+            irDu,
+            dejaPaye,
+            reste,
+            d.getDateLimite(),
+            statut);
     }
 
     public DeclarationIR trouverParId(Long id) {
@@ -160,15 +205,7 @@ public class DeclarationIRService {
             throw new BusinessException("CA HT invalide");
         }
 
-        Contribuable c = d.getContribuable();
-        if (c != null && "REEL_OBLIGATOIRE".equals(c.getRegime())) {
-            if (caHt < SEUIL_REEL_OBLIGATOIRE) {
-                throw new BusinessException(
-                    "Regime REEL OBLIGATOIRE : le CA doit etre >= "
-                    + String.format("%,d", SEUIL_REEL_OBLIGATOIRE).replace(',', ' ')
-                    + " Ar");
-            }
-        }
+        verifierSeuilRegimeReel(d.getContribuable(), caHt);
 
         d.setCaHt(caHt);
         return declarationRepository.save(d);
@@ -228,10 +265,14 @@ public class DeclarationIRService {
     }
 
     /**
-     * Calcul complet de l'IR avec :
-     *  - Reintegration automatique des charges sans facture
-     *  - Imputation automatique du deficit disponible
-     *  - Generation automatique de deficit si base < 0
+     * Calcul complet de l'IR (formulaire d'ajustements supprime de l'UI) :
+     *  - Reintegrations = anciennes saisies manuelles + penalites dues
+     *  - Acomptes verses = automatiquement les acomptes provisionnels PAYE de l'annee
+     *  - Imputation automatique du deficit disponible (min(benefice, dispo))
+     *  - Generation automatique du deficit si base < 0
+     *  - Solde total a payer = IR du + penalites + 1er acompte N+1 - acomptes verses
+     *
+     * Les parametres restent optionnels (compatibilite) : null = automatique.
      */
     @Transactional
     public DeclarationIR calculerEtEnregistrer(Long idDeclaration,
@@ -240,38 +281,60 @@ public class DeclarationIRService {
                                                 Long acomptesVerses) {
         DeclarationIR d = trouverParId(idDeclaration);
         verifierModifiable(d);
+        verifierSeuilRegimeReel(d);
+
+        if (totalReintegrationsManuelles != null) {
+            d.setReintegrationsManuelles(Math.max(0L, totalReintegrationsManuelles));
+        }
+        if (totalDeductions != null) {
+            d.setTotalDeductions(Math.max(0L, totalDeductions));
+        }
+
+        return recalculer(d, acomptesVerses);
+    }
+
+    /**
+     * Recalcul interne (sans verrou BROUILLON) : recalcule l'ensemble du bloc
+     * de resultats a partir des donnees stockees. Idempotent.
+     */
+    private DeclarationIR recalculer(DeclarationIR d, Long acomptesVersesSaisis) {
+        Long idDeclaration = d.getIdDeclaration();
+        Long idContribuable = d.getContribuable().getIdContribuable();
 
         List<LigneCharge> charges = ligneChargeRepository.findByDeclarationIdDeclaration(idDeclaration);
-
-        // Total des charges
         long totalCharges = charges.stream().mapToLong(LigneCharge::getMontantAr).sum();
 
-        // Charges sans facture (a reintegrer automatiquement)
-        long totalChargesSansFacture = charges.stream()
-                .filter(c -> c.getJustificatifRef() == null || c.getJustificatifRef().isBlank())
-                .mapToLong(LigneCharge::getMontantAr)
-                .sum();
+        // Deficits : expiration de l'ancien exercice puis disponible
+        deficitService.reverserImputation(idDeclaration);
+        long deficitDisponible = deficitService.preparerDeficitsDisponibles(idContribuable);
 
-        // Deficit disponible
-        long deficitDisponible = deficitService.calculerTotalDisponible(
-                d.getContribuable().getIdContribuable());
+        // Penalites dues : double comptage voulu (base imposable + montant a payer)
+        long penalitesDues = penaliteService.totalDues(idDeclaration);
 
-        // Calcul
+        // Acomptes verses : automatiques (sauf valeur forcee par l'appelant)
+        long acomptesVerses = acomptesVersesSaisis != null
+                ? Math.max(0L, acomptesVersesSaisis)
+                : acompteService.totalAcomptesVerses(idContribuable, d.getAnnee());
+
+        long reintegrations = nullSafe(d.getReintegrationsManuelles()) + penalitesDues;
+
         ResultatCalculIR r = irCalculationService.calculer(
                 d.getContribuable(),
                 d.getCaHt(),
                 totalCharges,
-                totalChargesSansFacture,
-                totalReintegrationsManuelles,
-                totalDeductions,
+                0L,
+                reintegrations,
+                d.getTotalDeductions(),
                 deficitDisponible,
                 acomptesVerses,
-                d.getMoisActifs());
+                d.getMoisActifs(),
+                penalitesDues);
 
         // Enregistrer les resultats dans la declaration
         d.setTotalCharges(r.getTotalCharges());
         d.setResultatComptable(r.getResultatComptable());
         d.setTotalReintegrations(r.getTotalReintegrations());
+        d.setPenaliteDueAr(penalitesDues);
         d.setTotalDeductions(r.getTotalDeductions());
         d.setDeficitImpute(r.getDeficitImpute());
         d.setBaseImposable(r.getBaseImposable());
@@ -279,59 +342,80 @@ public class DeclarationIRService {
         d.setIrBrut(r.getIrBrut());
         d.setMinimumPerception(r.getMinimumPerception());
         d.setIrDu(r.getIrDu());
+        d.setPremierAcompteAr(r.getPremierAcompte());
         d.setAcomptesVerses(r.getAcomptesVerses());
         d.setSoldeAPayer(r.getSoldeAPayer());
         d.setCreditImpot(r.getCreditImpot());
 
         DeclarationIR saved = declarationRepository.save(d);
 
-        // Imputation automatique du deficit si applicable
+        // Imputation automatique du deficit : min(benefice de l'annee, deficit dispo)
         if (r.getDeficitImpute() != null && r.getDeficitImpute() > 0) {
-            deficitService.imputerAutomatique(
-                    d.getContribuable().getIdContribuable(),
-                    idDeclaration,
-                    r.getDeficitImpute());
+            deficitService.imputerAutomatique(idContribuable, idDeclaration, r.getDeficitImpute());
         }
 
-        // Generation automatique de deficit si base < 0
+        // Generation automatique du deficit si base avant deficit < 0
         if (r.getBaseAvantDeficit() != null && r.getBaseAvantDeficit() < 0) {
-            long montantDeficit = Math.abs(r.getBaseAvantDeficit());
-            if (r.getDeficitGenere() == null || r.getDeficitGenere() <= 0) {
-                r.setDeficitGenere(montantDeficit);
-            }
-            if (r.getDeficitGenere() > 0) {
-                deficitService.creerAutomatique(
-                        d.getContribuable().getIdContribuable(),
-                        d.getAnnee(),
-                        r.getDeficitGenere());
+            long montantDeficit = r.getDeficitGenere() != null && r.getDeficitGenere() > 0
+                    ? r.getDeficitGenere()
+                    : Math.abs(r.getBaseAvantDeficit());
+            if (montantDeficit > 0) {
+                deficitService.creerAutomatique(idContribuable, d.getAnnee(), montantDeficit);
             }
         }
 
         return saved;
     }
 
+    private long nullSafe(Long v) {
+        return v == null ? 0L : Math.max(0L, v);
+    }
+
+    /**
+     * Validation de la declaration :
+     *  - depot apres le 15 mai de l'annee N+1 -> amende forfaitaire (100k a 200k)
+     *    ET interets de retard (1 % par mois commence)
+     *  - recalcul integre les penalites au bloc de resultats
+     *  - generation automatique des acomptes provisionnels de l'annee N+1
+     *    (2 x 50 % de l'IR de l'annee N)
+     */
     @Transactional
     public DeclarationIR valider(Long idDeclaration) {
         DeclarationIR d = trouverParId(idDeclaration);
         if (!"BROUILLON".equals(d.getStatut())) {
             throw new BusinessException("Seule une declaration BROUILLON peut etre validee");
         }
+        verifierSeuilRegimeReel(d);
         d.setStatut("VALIDEE");
         if (d.getDateDepot() == null) {
             d.setDateDepot(LocalDate.now());
         }
         DeclarationIR saved = declarationRepository.save(d);
 
-        // Penalite automatique si depot apres la date limite (regle CPF).
-        if (saved.getDateLimite() != null
+        // Penalites automatiques si depot apres la date limite (regle CPF).
+        boolean enRetard = saved.getDateLimite() != null
                 && saved.getDateDepot() != null
-                && saved.getDateDepot().isAfter(saved.getDateLimite())) {
+                && saved.getDateDepot().isAfter(saved.getDateLimite());
+        if (enRetard) {
             try {
                 penaliteService.appliquerAmendeDepotTardif(
                         saved.getIdDeclaration(), saved.getDateDepot());
             } catch (BusinessException ignore) {
                 // pas de penalite applicable
             }
+            try {
+                penaliteService.appliquerInteretsRetard(
+                        saved.getIdDeclaration(), saved.getDateDepot());
+            } catch (BusinessException ignore) {
+                // pas d'IR du a majorer
+            }
+        }
+
+        // Recalcul pour integrer les penalites (base imposable + solde total a payer)
+        boolean dejaCalculee = (saved.getIrDu() != null && saved.getIrDu() > 0)
+                || (saved.getCaHt() != null && saved.getCaHt() > 0);
+        if (dejaCalculee) {
+            saved = recalculer(saved, null);
         }
 
         if (saved.getIrDu() != null && saved.getIrDu() > 0) {
@@ -357,6 +441,23 @@ public class DeclarationIRService {
     private void verifierModifiable(DeclarationIR d) {
         if (!"BROUILLON".equals(d.getStatut())) {
             throw new BusinessException("Declaration verrouillee (statut=" + d.getStatut() + ")");
+        }
+    }
+
+    /**
+     * Regle CT4 : un contribuable au regime REEL_OBLIGATOIRE doit avoir
+     * un CA HT superieur ou egal a 400 000 000 Ar.
+     */
+    private void verifierSeuilRegimeReel(DeclarationIR d) {
+        verifierSeuilRegimeReel(d.getContribuable(), d.getCaHt());
+    }
+
+    private void verifierSeuilRegimeReel(Contribuable c, Long caHt) {
+        long valeur = caHt == null ? 0L : caHt;
+        if (c != null && "REEL_OBLIGATOIRE".equals(c.getRegime())
+                && valeur < SEUIL_CA_REEL_OBLIGATOIRE) {
+            throw new BusinessException(
+                "Un contribuable au régime REEL_OBLIGATOIRE doit avoir un CA HT ≥ 400 000 000 Ar.");
         }
     }
 }

@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
-import { LuSearch, LuX } from 'react-icons/lu';
+import { Input, Space } from 'antd';
 
 /**
- * Barre de recherche avec debounce.
+ * Barre de recherche avec debounce (API conservee).
  *
  * Props :
  *  - value       : valeur initiale (optionnel)
@@ -21,6 +21,7 @@ export default function SearchBar({
   const [local, setLocal] = useState(initialValue);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setLocal(initialValue);
   }, [initialValue]);
 
@@ -32,34 +33,16 @@ export default function SearchBar({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [local, delai]);
 
-  const handleClear = () => {
-    setLocal('');
-    onChange('');
-  };
-
   return (
-    <div className="search-bar">
-      <div className="search-input-wrapper">
-        <LuSearch className="search-icon" size={16} />
-        <input
-          type="text"
-          className="search-input form-input"
-          value={local}
-          onChange={(e) => setLocal(e.target.value)}
-          placeholder={placeholder}
-        />
-        {local && (
-          <button
-            type="button"
-            className="search-clear"
-            onClick={handleClear}
-            title="Effacer"
-          >
-            <LuX size={14} />
-          </button>
-        )}
-      </div>
+    <Space wrap size={8}>
+      <Input
+        allowClear
+        value={local}
+        onChange={(e) => setLocal(e.target.value)}
+        placeholder={placeholder}
+        style={{ width: 260 }}
+      />
       {children}
-    </div>
+    </Space>
   );
 }

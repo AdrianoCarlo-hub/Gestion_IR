@@ -47,12 +47,14 @@ public class ExcelExportService {
 
     public void ecrire(HttpServletResponse response,
                         String nomFichier,
+                        String titre,
                         List<ColonneDef> colonnes,
                         List<List<Object>> lignes) throws IOException {
 
         try (XSSFWorkbook wb = new XSSFWorkbook()) {
             Sheet sheet = wb.createSheet("Donnees");
 
+            XSSFCellStyle titreStyle = creerStyleTitre(wb);
             XSSFCellStyle headerStyle = creerStyleEntete(wb);
             XSSFCellStyle lignePaire = creerStyleLigne(wb, IndexedColors.WHITE);
             XSSFCellStyle ligneImpaire = creerStyleLigne(wb, IndexedColors.GREY_25_PERCENT);
@@ -61,8 +63,20 @@ public class ExcelExportService {
             XSSFCellStyle datePaire = creerStyleCentre(wb, lignePaire);
             XSSFCellStyle dateImpaire = creerStyleCentre(wb, ligneImpaire);
 
-            // Ligne d'entete
-            Row head = sheet.createRow(0);
+            // Ligne de titre en haut : "Titre - date du jour"
+            Row titreRow = sheet.createRow(0);
+            titreRow.setHeightInPoints(30);
+            Cell titreCell = titreRow.createCell(0);
+            titreCell.setCellValue(titre + " - " + java.time.LocalDate.now()
+                .format(java.time.format.DateTimeFormatter.ofPattern("dd/MM/yyyy")));
+            titreCell.setCellStyle(titreStyle);
+            if (colonnes.size() > 1) {
+                sheet.addMergedRegion(
+                    new CellRangeAddress(0, 0, 0, colonnes.size() - 1));
+            }
+
+            // Ligne d'entete (fond vert Safidy, texte blanc, gras)
+            Row head = sheet.createRow(1);
             head.setHeightInPoints(28);
             for (int i = 0; i < colonnes.size(); i++) {
                 Cell c = head.createCell(i);
@@ -71,9 +85,9 @@ public class ExcelExportService {
             }
 
             // Lignes de donnees
-            int r = 1;
+            int r = 2;
             for (List<Object> ligne : lignes) {
-                boolean paire = (r % 2 == 1);
+                boolean paire = (r % 2 == 0);
                 Row row = sheet.createRow(r);
                 row.setHeightInPoints(20);
 
@@ -142,10 +156,10 @@ public class ExcelExportService {
                 }
             }
 
-            // Freeze + filtre
-            sheet.createFreezePane(0, 1);
+            // Freeze (titre + entete) + filtre sur la ligne d'entete
+            sheet.createFreezePane(0, 2);
             if (!colonnes.isEmpty()) {
-                sheet.setAutoFilter(new CellRangeAddress(0, 0, 0, colonnes.size() - 1));
+                sheet.setAutoFilter(new CellRangeAddress(1, 1, 0, colonnes.size() - 1));
             }
 
             response.setContentType(
@@ -156,9 +170,22 @@ public class ExcelExportService {
         }
     }
 
+    private XSSFCellStyle creerStyleTitre(XSSFWorkbook wb) {
+        XSSFCellStyle style = wb.createCellStyle();
+        style.setAlignment(HorizontalAlignment.LEFT);
+        style.setVerticalAlignment(VerticalAlignment.CENTER);
+        XSSFFont font = wb.createFont();
+        font.setBold(true);
+        font.setFontHeightInPoints((short) 13);
+        font.setColor(new XSSFColor(new byte[]{(byte) 0x1b, (byte) 0x4d, (byte) 0x3e}, null));
+        style.setFont(font);
+        return style;
+    }
+
     private XSSFCellStyle creerStyleEntete(XSSFWorkbook wb) {
         XSSFCellStyle style = wb.createCellStyle();
-        byte[] rgbVert = new byte[]{(byte) 0x0d, (byte) 0x2f, (byte) 0x2a};
+        // Vert Safidy : #1B4D3E
+        byte[] rgbVert = new byte[]{(byte) 0x1b, (byte) 0x4d, (byte) 0x3e};
         style.setFillForegroundColor(new XSSFColor(rgbVert, null));
         style.setFillPattern(FillPatternType.SOLID_FOREGROUND);
         style.setAlignment(HorizontalAlignment.CENTER);

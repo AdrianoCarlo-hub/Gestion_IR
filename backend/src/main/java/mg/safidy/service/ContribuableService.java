@@ -202,13 +202,12 @@ public class ContribuableService {
             throw new BusinessException("Forme juridique obligatoire");
         }
 
-        // Regime
+        // Regime : reel obligatoire unique (REEL_OPTION supprime)
         if (c.getRegime() == null || c.getRegime().isBlank()) {
-            throw new BusinessException("Regime obligatoire");
+            c.setRegime("REEL_OBLIGATOIRE");
         }
-        if (!c.getRegime().equals("REEL_OBLIGATOIRE")
-                && !c.getRegime().equals("REEL_OPTION")) {
-            throw new BusinessException("Regime invalide (REEL_OBLIGATOIRE ou REEL_OPTION)");
+        if (!c.getRegime().equals("REEL_OBLIGATOIRE")) {
+            throw new BusinessException("Regime invalide : seul REEL_OBLIGATOIRE est autorise");
         }
     }
 

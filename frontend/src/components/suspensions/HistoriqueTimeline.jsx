@@ -1,9 +1,18 @@
-import { LuCirclePause, LuCirclePlay, LuCircleX } from 'react-icons/lu';
+import { Timeline, Tag, Typography } from 'antd';
+import {
+  PauseCircleOutlined,
+  PlayCircleOutlined,
+  StopOutlined,
+} from '@ant-design/icons';
+import EmptyState from '../EmptyState';
+import { formatDate } from '../../utils/format';
+
+const { Text } = Typography;
 
 const ICONES = {
-  VEILLEUSE: LuCirclePause,
-  CESSATION: LuCircleX,
-  REPRISE: LuCirclePlay,
+  VEILLEUSE: <PauseCircleOutlined />,
+  CESSATION: <StopOutlined />,
+  REPRISE: <PlayCircleOutlined />,
 };
 
 const LABELS = {
@@ -13,13 +22,19 @@ const LABELS = {
 };
 
 const STATUTS = {
-  EN_COURS: 'En cours',
-  TERMINEE: 'Terminee',
-  ANNULEE: 'Annulee',
+  EN_COURS: { label: 'En cours', couleur: 'processing' },
+  TERMINEE: { label: 'Terminee', couleur: 'success' },
+  ANNULEE: { label: 'Annulee', couleur: 'default' },
+};
+
+const COULEURS_TIMELINE = {
+  EN_COURS: 'blue',
+  TERMINEE: 'green',
+  ANNULEE: 'gray',
 };
 
 const MOTIFS = {
-  MANQUE_ACTIVITE: "Manque d'activite",
+  MANQUE_ACTIVITE: "Manque d activite",
   TRAVAUX: 'Travaux',
   SAISON: 'Activite saisonniere',
   DIFFICULTE_FINANCIERE: 'Difficulte financiere',
@@ -27,67 +42,73 @@ const MOTIFS = {
   AUTRE: 'Autre',
 };
 
-const formatDate = (date) => {
-  if (!date) return '';
-  const [annee, mois, jour] = date.split('-').map(Number);
-  return new Intl.DateTimeFormat('fr-FR', {
-    day: '2-digit',
-    month: 'long',
-    year: 'numeric',
-  }).format(new Date(annee, mois - 1, jour));
-};
-
 /**
  * Timeline verticale de l'historique des arrets / reprises d'un contribuable.
  */
 export default function HistoriqueTimeline({ historique = [] }) {
   if (!historique.length) {
-    return (
-      <div className="empty-state" style={{ padding: 24 }}>
-        <p>Aucun evenement enregistre</p>
-      </div>
-    );
+    return <EmptyState titre="Aucun evenement enregistre" texte="" />;
   }
 
-  return (
-    <ul className="timeline">
-      {historique.map((h) => {
-        const type = h.typeEvenement || 'VEILLEUSE';
-        const Icone = ICONES[type] || LuCirclePause;
-        const libelleEvenement = h.dateReprise
-          ? "Arret puis reprise d'activite"
-          : LABELS[type] || type;
-        return (
-          <li key={h.idSuspension} className={'timeline-item timeline-' + type.toLowerCase()}>
-            <span className="timeline-marker"><Icone className="icon" /></span>
-            <div className="timeline-content">
-              <div className="timeline-head">
-                <strong>{libelleEvenement}</strong>
-                <span className={'badge badge-' + (h.statut === 'EN_COURS' ? 'suspendu' : 'actif')}>
-                  {STATUTS[h.statut] || h.statut}
-                </span>
-              </div>
-              <div className="timeline-meta">
-                {h.dateArret && (
-                  <span><strong>Arrêt de l’activité :</strong> {formatDate(h.dateArret)}</span>
-                )}
-                {h.dateReprise && (
-                  <span><strong>Reprise de l’activité :</strong> {formatDate(h.dateReprise)}</span>
-                )}
-                {h.motif && <span><strong>Motif :</strong> {MOTIFS[h.motif] || h.motif}</span>}
-                {h.dateLimiteDeclaration && (
-                  <span><strong>Date limite de declaration :</strong> {formatDate(h.dateLimiteDeclaration)}</span>
-                )}
-                {h.agentArret && <span>Enregistré par : {h.agentArret}</span>}
-                {h.agentReprise && <span>Reprise enregistrée par : {h.agentReprise}</span>}
-                {h.attestationRadiationNumero && (
-                  <span>Attestation : {h.attestationRadiationNumero}</span>
-                )}
-              </div>
-            </div>
-          </li>
-        );
-      })}
-    </ul>
-  );
+  const items = historique.map((h) => {
+    const type = h.typeEvenement || 'VEILLEUSE';
+    const libelleEvenement = h.dateReprise
+      ? "Arret puis reprise d activite"
+      : LABELS[type] || type;
+    const statut = STATUTS[h.statut] || { label: h.statut, couleur: 'default' };
+
+    return {
+      key: h.idSuspension,
+      color: COULEURS_TIMELINE[h.statut] || 'blue',
+      children: (
+        <div style={{ paddingBottom: 4 }}>
+          <div
+            style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              gap: 8,
+              flexWrap: 'wrap',
+              marginBottom: 6,
+            }}
+          >
+            <strong>
+              {ICONES[type] || <PauseCircleOutlined />} {libelleEvenement}
+            </strong>
+            <Tag color={statut.couleur}>{statut.label}</Tag>
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 2, fontSize: 13 }}>
+            {h.dateArret && (
+              <span>
+                <Text strong>Arret de l activite :</Text> {formatDate(h.dateArret)}
+              </span>
+            )}
+            {h.dateReprise && (
+              <span>
+                <Text strong>Reprise de l activite :</Text> {formatDate(h.dateReprise)}
+              </span>
+            )}
+            {h.motif && (
+              <span>
+                <Text strong>Motif :</Text> {MOTIFS[h.motif] || h.motif}
+              </span>
+            )}
+            {h.dateLimiteDeclaration && (
+              <span>
+                <Text strong>Date limite de declaration :</Text>{' '}
+                {formatDate(h.dateLimiteDeclaration)}
+              </span>
+            )}
+            {h.agentArret && <span>Enregistre par : {h.agentArret}</span>}
+            {h.agentReprise && <span>Reprise enregistree par : {h.agentReprise}</span>}
+            {h.attestationRadiationNumero && (
+              <span>Attestation : {h.attestationRadiationNumero}</span>
+            )}
+          </div>
+        </div>
+      ),
+    };
+  });
+
+  return <Timeline items={items} />;
 }

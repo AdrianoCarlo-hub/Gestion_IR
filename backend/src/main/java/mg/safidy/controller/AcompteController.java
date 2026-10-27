@@ -68,6 +68,14 @@ public class AcompteController {
         return service.calculerSituationAcomptes(id, annee);
     }
 
+    /**
+     * Tableau des acomptes : une ligne par annee du contribuable.
+     */
+    @GetMapping("/par-annee/{idContribuable}")
+    public List<Map<String, Object>> situationParAnnee(@PathVariable Long idContribuable) {
+        return service.situationParAnnee(idContribuable);
+    }
+
     @GetMapping("/echeances/{idContribuable}/{annee}")
     public Map<String, Object> echeancesAnnee(@PathVariable Long idContribuable,
                                                @PathVariable Integer annee) {

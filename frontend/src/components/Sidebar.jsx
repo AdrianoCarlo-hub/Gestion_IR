@@ -1,120 +1,108 @@
-import { NavLink, useNavigate } from 'react-router-dom';
-import { useState, useEffect } from 'react';
-import { useAuth } from '../context/AuthContext';
+import { useNavigate, useLocation } from 'react-router-dom';
+import { Menu, Avatar, Typography, Button, Tooltip } from 'antd';
 import {
-  LuLayoutDashboard,
-  LuUsers,
-  LuFileText,
-  LuTrendingDown,
-  LuCalendar,
-  LuCreditCard,
-  LuTriangleAlert,
-  LuCirclePause,
-  LuScrollText,
-  LuLogOut,
-  LuUser,
-  LuChevronLeft,
-  LuChevronRight,
-  LuChartColumn,
-  LuSettings,
-} from 'react-icons/lu';
+  DashboardOutlined,
+  TeamOutlined,
+  FileTextOutlined,
+  FallOutlined,
+  CalendarOutlined,
+  CreditCardOutlined,
+  WarningOutlined,
+  PauseCircleOutlined,
+  AuditOutlined,
+  SettingOutlined,
+  LogoutOutlined,
+  UserOutlined,
+  AlertOutlined,
+} from '@ant-design/icons';
+import { useAuth } from '../context/AuthContext';
+import Logo from './Logo';
 
-const items = [
-  { to: '/dashboard',     label: 'Tableau de bord', icon: LuLayoutDashboard },
-  { to: '/contribuables', label: 'Contribuables',   icon: LuUsers },
-  { to: '/declarations',  label: 'Declarations IR', icon: LuFileText },
-  { to: '/deficits',      label: 'Deficits',        icon: LuTrendingDown },
-  { to: '/acomptes',      label: 'Acomptes',        icon: LuCalendar },
-  { to: '/paiements',     label: 'Paiements',       icon: LuCreditCard },
-  { to: '/penalites',     label: 'Penalites',       icon: LuTriangleAlert },
-  { to: '/suspensions',   label: 'Arret / reprise', icon: LuCirclePause },
-  { to: '/statistiques',  label: 'Statistiques',    icon: LuChartColumn },
-  { to: '/audit',         label: 'Journal d audit', icon: LuScrollText },
-  { to: '/admin',         label: 'Administration',  icon: LuSettings, role: 'ADMIN' },
+const { Text } = Typography;
+
+const MENU = [
+  { path: '/dashboard', label: 'Tableau de bord', icon: <DashboardOutlined /> },
+  { path: '/contribuables', label: 'Contribuables', icon: <TeamOutlined /> },
+  { path: '/declarations', label: 'Declarations IR', icon: <FileTextOutlined /> },
+  { path: '/deficits', label: 'Deficits', icon: <FallOutlined /> },
+  { path: '/acomptes', label: 'Acomptes', icon: <CalendarOutlined /> },
+  { path: '/paiements', label: 'Paiements', icon: <CreditCardOutlined /> },
+  { path: '/penalites', label: 'Penalites', icon: <WarningOutlined /> },
+  { path: '/suspensions', label: 'Arret / reprise', icon: <PauseCircleOutlined /> },
+  { path: '/audit', label: "Journal d'audit", icon: <AuditOutlined /> },
+  { path: '/admin', label: 'Administration', icon: <SettingOutlined />, role: 'ADMIN' },
 ];
 
-export default function Sidebar({ className = '' }) {
+export default function Sidebar({ collapsed = false }) {
   const { agent, logout } = useAuth();
   const navigate = useNavigate();
-  const [collapsed, setCollapsed] = useState(false);
+  const location = useLocation();
 
-  useEffect(() => {
-    const savedState = localStorage.getItem('sidebarCollapsed');
-    if (savedState) setCollapsed(savedState === 'true');
-  }, []);
+  const items = MENU.filter((m) => !m.role || m.role === agent?.role).map((m) => ({
+    key: m.path,
+    icon: m.icon,
+    label: m.label,
+  }));
 
-  useEffect(() => {
-    localStorage.setItem('sidebarCollapsed', collapsed.toString());
-  }, [collapsed]);
+  const selected = items.find((i) => location.pathname.startsWith(i.key))?.key
+    || '/dashboard';
 
   const handleLogout = () => {
     logout();
     navigate('/login');
   };
 
-  const getInitials = (nom, prenom) => {
-    if (!nom && !prenom) return 'A';
-    const f = prenom ? prenom.charAt(0).toUpperCase() : '';
-    const n = nom ? nom.charAt(0).toUpperCase() : '';
-    return (f + n).slice(0, 2) || 'A';
-  };
-
   return (
-    <aside className={`sidebar ${collapsed ? 'collapsed' : ''} ${className}`.trim()}>
-      <div className="sidebar-brand">
-        <div className="brand-logo">IR</div>
-        <div className="brand-text">
-          <strong>Safidy</strong>
-          <span>Centre fiscal</span>
-        </div>
+    <div className="side-menu">
+      <div className="side-brand">
+        <Logo size={34} repli="IR" />
+        {!collapsed && (
+          <div className="side-brand-text">
+            <strong>Gestion IR</strong>
+            <span>Centre fiscal</span>
+          </div>
+        )}
       </div>
 
-      <button
-        className="sidebar-collapse"
-        onClick={() => setCollapsed(!collapsed)}
-        title={collapsed ? 'Agrandir' : 'Reduire'}
-      >
-        {collapsed ? <LuChevronRight size={14} /> : <LuChevronLeft size={14} />}
-      </button>
+      <Menu
+        theme="dark"
+        mode="inline"
+        inlineCollapsed={collapsed}
+        selectedKeys={[selected]}
+        items={items}
+        onClick={({ key }) => navigate(key)}
+        style={{ borderInlineEnd: 'none', flex: 1, overflowY: 'auto' }}
+      />
 
-      <nav className="sidebar-nav">
-        {items.filter((item) => !item.role || item.role === agent?.role).map((item) => {
-          const Icon = item.icon;
-          return (
-            <NavLink
-              key={item.to}
-              to={item.to}
-              className={({ isActive }) => 'nav-item' + (isActive ? ' active' : '')}
-              title={collapsed ? item.label : undefined}
-            >
-              <span className="nav-icon"><Icon size={18} /></span>
-              <span className="nav-label">{item.label}</span>
-            </NavLink>
-          );
-        })}
-      </nav>
-
-      <div className="sidebar-footer">
-        <div className="agent-info">
-          <div className="agent-avatar">
-            {agent && (agent.prenom || agent.nom) ? (
-              getInitials(agent.nom, agent.prenom)
-            ) : (
-              <LuUser size={14} />
-            )}
+      <div className="side-footer">
+        <Avatar
+          size={32}
+          style={{ backgroundColor: '#0E7A55', flexShrink: 0 }}
+          icon={!agent?.prenom && !agent?.nom ? <UserOutlined /> : undefined}
+        >
+          {agent?.prenom || agent?.nom
+            ? `${(agent?.prenom || '')[0] || ''}${(agent?.nom || '')[0] || ''}`.toUpperCase()
+            : ''}
+        </Avatar>
+        {!collapsed && (
+          <div className="side-agent">
+            <Text strong style={{ color: '#fff', lineHeight: 1.2 }}>
+              {agent ? `${agent.prenom || ''} ${agent.nom || ''}`.trim() : ''}
+            </Text>
+            <Text style={{ color: 'rgba(255,255,255,0.6)', fontSize: 12 }}>
+              {agent?.role || ''}
+            </Text>
           </div>
-          <div className="agent-details">
-            <span className="agent-name">
-              {agent ? `${agent.prenom} ${agent.nom}` : ''}
-            </span>
-            <span className="agent-role">{agent ? agent.role : ''}</span>
-          </div>
-        </div>
-        <button className="btn-logout" onClick={handleLogout} title="Deconnexion">
-          <LuLogOut size={14} />
-          <span className="nav-label">Deconnexion</span>
-        </button>
+        )}
+        <Tooltip title="Deconnexion" placement="right">
+          <Button
+            type="text"
+            icon={<LogoutOutlined />}
+            onClick={handleLogout}
+            style={{ color: 'rgba(255,255,255,0.75)', marginLeft: 'auto' }}
+          />
+        </Tooltip>
       </div>
-    </aside>
+    </div>
   );
 }

@@ -19,6 +19,9 @@ public class ResultatCalculIR {
     private Long minimumPerception;
     private Long irDu;
     private Long acomptesVerses;
+    private Long penalitesDues;
+    private Long premierAcompte;
+    private Long totalAPayer;
     private Long soldeAPayer;
     private Long creditImpot;
 
@@ -143,6 +146,30 @@ public class ResultatCalculIR {
 
     public void setAcomptesVerses(Long acomptesVerses) {
         this.acomptesVerses = acomptesVerses;
+    }
+
+    public Long getPenalitesDues() {
+        return penalitesDues;
+    }
+
+    public void setPenalitesDues(Long penalitesDues) {
+        this.penalitesDues = penalitesDues;
+    }
+
+    public Long getPremierAcompte() {
+        return premierAcompte;
+    }
+
+    public void setPremierAcompte(Long premierAcompte) {
+        this.premierAcompte = premierAcompte;
+    }
+
+    public Long getTotalAPayer() {
+        return totalAPayer;
+    }
+
+    public void setTotalAPayer(Long totalAPayer) {
+        this.totalAPayer = totalAPayer;
     }
 
     public Long getSoldeAPayer() {

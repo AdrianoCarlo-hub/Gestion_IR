@@ -1,16 +1,7 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
+import { Modal, Select, Tag, Button } from 'antd';
 
-/**
- * Modal generique pour changer le statut d'une entite.
- *
- * Props :
- *  - ouvert          : boolean
- *  - titre           : titre du modal
- *  - statutActuel    : statut actuel (pour info)
- *  - options         : [{ value, label, couleur }]
- *  - onChoisir       : (nouveauStatut) => void
- *  - onFermer        : () => void
- */
+
 export default function StatutModal({
   ouvert,
   titre = 'Changer le statut',
@@ -19,60 +10,74 @@ export default function StatutModal({
   onChoisir,
   onFermer,
 }) {
-  useEffect(() => {
-    const handler = (e) => {
-      if (e.key === 'Escape' && ouvert) onFermer();
-    };
-    window.addEventListener('keydown', handler);
-    return () => window.removeEventListener('keydown', handler);
-  }, [ouvert, onFermer]);
+  const [choix, setChoix] = useState('');
 
-  if (!ouvert) return null;
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    if (ouvert) setChoix(statutActuel || '');
+  }, [ouvert, statutActuel]);
+
+  const optionsSelect = options.map((opt) => ({
+    value: opt.value,
+    disabled: opt.value === statutActuel,
+    label: (
+      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+        <span
+          style={{
+            width: 8,
+            height: 8,
+            borderRadius: '50%',
+            background: opt.couleur || '#64748b',
+            display: 'inline-block',
+          }}
+        />
+        {opt.label}
+      </span>
+    ),
+  }));
+
+  const valider = () => {
+    if (choix && choix !== statutActuel) onChoisir(choix);
+    onFermer();
+  };
 
   return (
-    <div className="modal-overlay" onClick={onFermer}>
-      <div className="modal-box" onClick={(e) => e.stopPropagation()}>
-        <div className="modal-header">
-          <h3>{titre}</h3>
-        </div>
-        <div className="modal-body">
-          {statutActuel && (
-            <p style={{ marginBottom: 16, color: '#64748b' }}>
-              Statut actuel : <strong>{statutActuel}</strong>
-            </p>
-          )}
-          <div className="statut-options">
-            {options.map((opt) => (
-              <button
-                key={opt.value}
-                className={
-                  'statut-option' +
-                  (opt.value === statutActuel ? ' statut-option-active' : '')
-                }
-                onClick={() => {
-                  if (opt.value !== statutActuel) onChoisir(opt.value);
-                  onFermer();
-                }}
-                disabled={opt.value === statutActuel}
-              >
-                <span
-                  className="statut-dot"
-                  style={{ background: opt.couleur || '#64748b' }}
-                />
-                <span className="statut-option-label">{opt.label}</span>
-                {opt.value === statutActuel && (
-                  <span className="statut-option-badge">Actuel</span>
-                )}
-              </button>
-            ))}
-          </div>
-        </div>
-        <div className="modal-footer">
-          <button className="btn-secondary" onClick={onFermer}>
-            Annuler
-          </button>
-        </div>
-      </div>
-    </div>
+    <Modal
+      open={ouvert}
+      title={titre}
+      onCancel={onFermer}
+      centered
+      width={440}
+      destroyOnHidden
+      footer={[
+        <Button key="annuler" onClick={onFermer}>
+          Annuler
+        </Button>,
+        <Button
+          key="valider"
+          type="primary"
+          disabled={!choix || choix === statutActuel}
+          onClick={valider}
+        >
+          Valider
+        </Button>,
+      ]}
+    >
+      {statutActuel && (
+        <p style={{ marginBottom: 16, color: '#64748b' }}>
+          Statut actuel :{' '}
+          <Tag color="blue" style={{ marginInlineStart: 4 }}>
+            {statutActuel}
+          </Tag>
+        </p>
+      )}
+      <Select
+        style={{ width: '100%' }}
+        placeholder="Choisir un nouveau statut"
+        value={choix || undefined}
+        onChange={setChoix}
+        options={optionsSelect}
+      />
+    </Modal>
   );
 }

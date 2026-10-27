@@ -33,6 +33,7 @@ Thumbs.db
 
 # Sauvegardes base de donnees
 database/backup_*.sql
+database/backups/
 
 # Fichier de configuration local (contient le mot de passe)
 backend/src/main/resources/application.properties

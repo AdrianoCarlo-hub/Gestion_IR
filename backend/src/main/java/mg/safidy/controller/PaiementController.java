@@ -37,6 +37,20 @@ public class PaiementController {
         return service.listerParContribuable(idContribuable);
     }
 
+    /**
+     * Detail du montant a regler avant enregistrement :
+     * GET /api/paiements/recap/{idDeclaration}?typeReglement=TOUS|2EME_ACOMPTE&date=aaaa-mm-jj
+     */
+    @GetMapping("/recap/{idDeclaration}")
+    public Map<String, Object> recapitulatif(
+            @PathVariable Long idDeclaration,
+            @RequestParam(defaultValue = "TOUS") String typeReglement,
+            @RequestParam(required = false)
+            @org.springframework.format.annotation.DateTimeFormat(iso = org.springframework.format.annotation.DateTimeFormat.ISO.DATE)
+            LocalDate date) {
+        return service.recapitulatif(idDeclaration, typeReglement, date);
+    }
+
     @PostMapping
     public ResponseEntity<Paiement> enregistrer(@RequestBody Map<String, Object> body) {
         Long idContribuable = Long.valueOf(body.get("idContribuable").toString());
@@ -44,8 +58,13 @@ public class PaiementController {
                 : Long.valueOf(body.get("idDeclaration").toString());
         Long idAcompte = body.get("idAcompte") == null ? null
                 : Long.valueOf(body.get("idAcompte").toString());
-        String type = body.get("typePaiement").toString();
-        Long montant = Long.valueOf(body.get("montantAr").toString());
+        String typeReglement = body.get("typeReglement") == null ? null
+                : body.get("typeReglement").toString();
+        String typePaiement = body.get("typePaiement") == null ? null
+                : body.get("typePaiement").toString();
+        String type = typeReglement != null ? typeReglement : typePaiement;
+        Long montant = body.get("montantAr") == null ? null
+                : Long.valueOf(body.get("montantAr").toString());
         LocalDate date = LocalDate.parse(body.get("datePaiement").toString());
         String mode = body.get("mode").toString();
         Long idAgent = Long.valueOf(body.get("idAgent").toString());
@@ -53,7 +72,8 @@ public class PaiementController {
         Paiement p = service.enregistrer(idContribuable, idDeclaration, idAcompte,
                 type, montant, date, mode, idAgent);
         audit.log("ENREGISTREMENT_PAIEMENT", "paiement", p.getIdPaiement(),
-                  "Quittance=" + p.getReferenceQuittance() + " Montant=" + montant + " Ar");
+                  "Quittance=" + p.getReferenceQuittance() + " Montant=" + p.getMontantAr() + " Ar"
+                  + " Reglement=" + p.getTypeReglement());
         return ResponseEntity.ok(p);
     }
 

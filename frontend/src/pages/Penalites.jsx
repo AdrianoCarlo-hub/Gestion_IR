@@ -1,98 +1,117 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import {
+  Button,
+  Card,
+  Col,
+  Form,
+  Row,
+  Select,
+  Space,
+  Table,
+  Tag,
+  Tooltip,
+  Typography,
+} from 'antd';
+import {
+  CheckCircleOutlined,
+  ClockCircleOutlined,
+  EyeOutlined,
+  GiftOutlined,
+  PrinterOutlined,
+  WarningOutlined,
+  FileExcelOutlined,
+} from '@ant-design/icons';
 import { lister as listerContribuables } from '../services/contribuableService';
 import { lister as listerDeclarations } from '../services/declarationService';
 import * as service from '../services/penaliteService';
+import * as exportService from '../services/exportService';
 import ContribuableRecherche from '../components/ContribuableRecherche';
 import PenaliteCard from '../components/penalites/PenaliteCard';
 import DecompteDetail from '../components/penalites/DecompteDetail';
 import RemiseGracieuseModal from '../components/penalites/RemiseGracieuseModal';
+import EmptyState from '../components/EmptyState';
 import { SkeletonStatsGrid, SkeletonTable } from '../components/Spinner';
 import { useToast } from '../context/ToastContext';
-import {
-  LuTriangleAlert, LuDollarSign, LuPercent, LuCircleCheck, LuCalculator,
-  LuPrinter, LuHandHeart, LuCircleX,
-} from 'react-icons/lu';
+import { formatAr, formatDate, STATUT_PENALITE, TYPE_PENALITE } from '../utils/format';
 
-const fmt = (n) => (n == null ? '0' : Number(n).toLocaleString('fr-FR').replace(/\u202f|\u00a0/g, ' '));
-const today = new Date().toISOString().slice(0, 10);
+const { Text } = Typography;
+
 const anneeCourante = new Date().getFullYear();
 
-const STATUT_BADGE = {
-  DUE: 'radie',
-  PAYEE: 'actif',
-  ANNULEE: 'cesse',
-  EN_DEMANDE_REMISE: 'info',
-};
+const OPTIONS_STATUT = [
+  { value: '', label: 'Tous les statuts' },
+  ...Object.entries(STATUT_PENALITE).map(([value, s]) => ({ value, label: s.libelle })),
+];
+
+const OPTIONS_TYPE = [
+  { value: '', label: 'Tous les types' },
+  ...Object.entries(TYPE_PENALITE).map(([value, label]) => ({ value, label })),
+];
 
 export default function Penalites() {
   const toast = useToast();
   const [contribuables, setContribuables] = useState([]);
+  const [declarations, setDeclarations] = useState([]);
   const [selected, setSelected] = useState('');
   const [annee, setAnnee] = useState(anneeCourante);
   const [situation, setSituation] = useState(null);
   const [loading, setLoading] = useState(false);
-
-  const [declarations, setDeclarations] = useState([]);
-  const [selectedDecl, setSelectedDecl] = useState('');
-  const [date, setDate] = useState(today);
+  const [filtreStatut, setFiltreStatut] = useState('');
+  const [filtreType, setFiltreType] = useState('');
   const [remise, setRemise] = useState(null);
+  const [expandes, setExpandes] = useState([]);
+  const [exportLoading, setExportLoading] = useState(false);
 
   useEffect(() => {
     listerContribuables().then(setContribuables).catch(() => {});
     listerDeclarations().then(setDeclarations).catch(() => {});
   }, []);
 
-  const charger = useCallback(async (id, an) => {
-    if (!id) { setSituation(null); return; }
-    setLoading(true);
-    try {
-      setSituation(await service.situation(id, an));
-    } catch (e) {
-      toast.error(e.response?.data?.message || 'Erreur de chargement');
-      setSituation(null);
-    } finally {
-      setLoading(false);
-    }
-  }, [toast]);
+  const recharger = () => {
+    if (!selected) return;
+    service
+      .situation(selected, annee)
+      .then((data) => setSituation(data))
+      .catch((e) => toast.error(e.response?.data?.message || 'Erreur de chargement'));
+  };
 
   useEffect(() => {
-    if (selected) charger(selected, annee);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selected, annee]);
+    if (!selected) return;
+    service
+      .situation(selected, annee)
+      .then((data) => setSituation(data))
+      .catch((e) => {
+        toast.error(e.response?.data?.message || 'Erreur de chargement');
+        setSituation(null);
+      })
+      .finally(() => setLoading(false));
+  }, [selected, annee, toast]);
 
-  const declarationSelectionnee = () =>
-    declarations.find((d) => String(d.idDeclaration) === String(selectedDecl));
-
-  const apresCalcul = (decl) => {
-    if (decl && decl.contribuable) {
-      setSelected(String(decl.contribuable.idContribuable));
-      setAnnee(decl.annee);
+  const onContribuable = (id) => {
+    setSelected(id);
+    setExpandes([]);
+    if (id) {
+      setLoading(true);
     } else {
-      charger(selected, annee);
+      setLoading(false);
+      setSituation(null);
     }
   };
 
-  const calculerDepot = async () => {
-    const decl = declarationSelectionnee();
-    if (!decl) return;
-    try {
-      await service.calculerDepot(decl.idDeclaration, date);
-      toast.success('Amende de depot calculee');
-      apresCalcul(decl);
-    } catch (e) {
-      toast.error(e.response?.data?.message || 'Erreur');
-    }
+  const onAnnee = (v) => {
+    setAnnee(v);
+    if (selected) setLoading(true);
   };
 
-  const calculerMajoration = async () => {
-    const decl = declarationSelectionnee();
-    if (!decl) return;
+  const handleExportExcel = async () => {
+    setExportLoading(true);
     try {
-      await service.calculerMajoration(decl.idDeclaration, date);
-      toast.success('Majoration calculee');
-      apresCalcul(decl);
+      await exportService.exportPenalites();
+      toast.success('Export effectue avec succes');
     } catch (e) {
-      toast.error(e.response?.data?.message || 'Erreur');
+      toast.error(e.response?.data?.message || "Erreur lors de l export");
+    } finally {
+      setExportLoading(false);
     }
   };
 
@@ -100,19 +119,7 @@ export default function Penalites() {
     try {
       await service.changerStatut(p.idPenalite, 'PAYEE');
       toast.success('Penalite reglee');
-      charger(selected, annee);
-    } catch (e) {
-      toast.error(e.response?.data?.message || 'Erreur');
-    }
-  };
-
-  const annuler = async (p) => {
-    const motif = window.prompt('Motif de l annulation :');
-    if (motif == null) return;
-    try {
-      await service.annuler(p.idPenalite, motif);
-      toast.success('Penalite annulee');
-      charger(selected, annee);
+      recharger();
     } catch (e) {
       toast.error(e.response?.data?.message || 'Erreur');
     }
@@ -123,152 +130,289 @@ export default function Penalites() {
       await service.remiseGracieuse(remise.idPenalite, motif, justificatif);
       toast.success('Demande de remise envoyee');
       setRemise(null);
-      charger(selected, annee);
+      recharger();
     } catch (e) {
       toast.error(e.response?.data?.message || 'Erreur');
     }
   };
 
-  const s = situation || { penalites: [], totalDu: 0, totalAmendesDepot: 0, totalMajorations: 0, totalPayees: 0 };
+  const basculerDetail = (p) => {
+    setExpandes((prev) =>
+      prev.includes(p.idPenalite)
+        ? prev.filter((k) => k !== p.idPenalite)
+        : [...prev, p.idPenalite]
+    );
+  };
+
+  const optionsAnnee = useMemo(() => {
+    const annees = new Set(declarations.map((d) => d.annee).filter(Boolean));
+    for (let y = anneeCourante; y >= 2015; y -= 1) annees.add(y);
+    return [...annees]
+      .sort((a, b) => b - a)
+      .map((y) => ({ value: y, label: String(y) }));
+  }, [declarations]);
+
+  const listeBase = useMemo(() => situation?.penalites || [], [situation]);
+  const penalitesFiltrees = useMemo(
+    () =>
+      listeBase.filter(
+        (p) =>
+          (!filtreStatut || p.statut === filtreStatut) &&
+          (!filtreType || p.type === filtreType)
+      ),
+    [listeBase, filtreStatut, filtreType]
+  );
+
+  const contribuableSelectionne = contribuables.find(
+    (c) => String(c.idContribuable) === String(selected)
+  );
+
+  const totalDu = situation?.totalDu || 0;
+  const totalPaye = situation?.totalPayees || 0;
+  const enAttente = Math.max(totalDu - totalPaye, 0);
+
+  const colonnes = [
+    {
+      title: 'Contribuable',
+      key: 'contribuable',
+      render: () =>
+        contribuableSelectionne
+          ? `${contribuableSelectionne.nif} - ${contribuableSelectionne.raisonSociale}`
+          : '-',
+    },
+    {
+      title: 'Declaration / annee',
+      key: 'declaration',
+      width: 150,
+      render: () => (situation?.annee != null ? String(situation.annee) : '-'),
+    },
+    {
+      title: 'Type',
+      key: 'type',
+      width: 170,
+      render: (_, p) => TYPE_PENALITE[p.type] || p.type,
+    },
+    {
+      title: 'Base de calcul',
+      key: 'base',
+      align: 'right',
+      width: 140,
+      render: (_, p) => formatAr(p.baseCalculAr),
+    },
+    {
+      title: 'Nb mois',
+      key: 'mois',
+      width: 90,
+      render: (_, p) => (p.nbMois ? `${p.nbMois} mois` : '-'),
+    },
+    {
+      title: 'Taux',
+      key: 'taux',
+      width: 90,
+      render: (_, p) => (p.tauxPct != null ? `${p.tauxPct} %` : '-'),
+    },
+    {
+      title: 'Montant',
+      key: 'montant',
+      align: 'right',
+      width: 140,
+      render: (_, p) => <Text strong>{formatAr(p.montantAr)}</Text>,
+    },
+    {
+      title: 'Statut',
+      key: 'statut',
+      width: 170,
+      render: (_, p) => {
+        const s = STATUT_PENALITE[p.statut];
+        return <Tag color={s ? s.couleur : 'default'}>{s ? s.libelle : p.statut}</Tag>;
+      },
+    },
+    {
+      title: 'Date',
+      key: 'date',
+      width: 110,
+      render: (_, p) => formatDate(p.dateLimite || p.dateCreation),
+    },
+    {
+      title: 'Actions',
+      key: 'actions',
+      width: 170,
+      render: (_, p) => (
+        <Space size={4}>
+          <Tooltip title="Voir le decompte">
+            <Button
+              size="small"
+              type={expandes.includes(p.idPenalite) ? 'primary' : 'default'}
+              icon={<EyeOutlined />}
+              onClick={() => basculerDetail(p)}
+            />
+          </Tooltip>
+          {p.statut === 'DUE' && (
+            <>
+              <Tooltip title="Demander une remise gracieuse">
+                <Button
+                  size="small"
+                  icon={<GiftOutlined />}
+                  onClick={() => setRemise(p)}
+                />
+              </Tooltip>
+              <Tooltip title="Marquer payee">
+                <Button
+                  size="small"
+                  icon={<CheckCircleOutlined />}
+                  onClick={() => regler(p)}
+                />
+              </Tooltip>
+            </>
+          )}
+          <Tooltip title="Imprimer l'avis">
+            <Button
+              size="small"
+              icon={<PrinterOutlined />}
+              onClick={() => window.print()}
+            />
+          </Tooltip>
+        </Space>
+      ),
+    },
+  ];
 
   return (
     <div className="page">
       <header className="page-header">
         <div>
-          <h1>Penalites</h1>
-          <p className="page-sub">Amendes de depot, majorations de retard et infractions specifiques</p>
+          <h1 className="page-title">Penalites</h1>
+          <p className="page-subtitle">
+            Amendes de depot, majorations de retard et infractions specifiques
+          </p>
+        </div>
+        <div>
+          <Button
+            icon={<FileExcelOutlined />}
+            onClick={handleExportExcel}
+            loading={exportLoading}
+          >
+            Exporter Excel
+          </Button>
         </div>
       </header>
 
-      <div className="form-panel" style={{ marginBottom: 16 }}>
-        <div className="form-row">
-          <div className="form-group" style={{ flex: 2 }}>
-            <label className="form-label">Contribuable</label>
-            <ContribuableRecherche contribuables={contribuables}
-              value={selected} onChange={(id) => setSelected(id)} />
-          </div>
-          <div className="form-group">
-            <label className="form-label">Annee</label>
-            <input type="number" className="form-input" value={annee}
-              onChange={(e) => setAnnee(Number(e.target.value))} />
-          </div>
-        </div>
-
-        <div className="form-row" style={{ marginTop: 16, alignItems: 'flex-end' }}>
-          <div className="form-group" style={{ flex: 2 }}>
-            <label className="form-label">Declaration (pour calculer une penalite)</label>
-            <select className="form-input" value={selectedDecl}
-              onChange={(e) => setSelectedDecl(e.target.value)}>
-              <option value="">-- Choisir une declaration --</option>
-              {declarations.map((d) => (
-                <option key={d.idDeclaration} value={d.idDeclaration}>
-                  {d.contribuable?.raisonSociale} - {d.annee} ({d.statut})
-                </option>
-              ))}
-            </select>
-          </div>
-          <div className="form-group">
-            <label className="form-label">Date de reference</label>
-            <input type="date" className="form-input" value={date}
-              onChange={(e) => setDate(e.target.value)} />
-          </div>
-          <div className="form-group">
-            <div className="form-actions" style={{ margin: 0 }}>
-              <button className="btn btn-primary" onClick={calculerDepot} disabled={!selectedDecl}>
-                <LuTriangleAlert className="icon" /> Amende depot
-              </button>
-              <button className="btn btn-primary" onClick={calculerMajoration} disabled={!selectedDecl}>
-                <LuCalculator className="icon" /> Majoration
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
+      <Card size="small">
+        <Form layout="vertical">
+          <Row gutter={[12, 8]}>
+            <Col xs={24} md={9}>
+              <Form.Item label="Contribuable" style={{ marginBottom: 0 }}>
+                <ContribuableRecherche
+                  contribuables={contribuables}
+                  value={selected}
+                  onChange={onContribuable}
+                />
+              </Form.Item>
+            </Col>
+            <Col xs={24} md={5}>
+              <Form.Item label="Statut" style={{ marginBottom: 0 }}>
+                <Select
+                  value={filtreStatut}
+                  onChange={setFiltreStatut}
+                  options={OPTIONS_STATUT}
+                  style={{ width: '100%' }}
+                />
+              </Form.Item>
+            </Col>
+            <Col xs={24} md={6}>
+              <Form.Item label="Type de penalite" style={{ marginBottom: 0 }}>
+                <Select
+                  value={filtreType}
+                  onChange={setFiltreType}
+                  options={OPTIONS_TYPE}
+                  style={{ width: '100%' }}
+                />
+              </Form.Item>
+            </Col>
+            <Col xs={24} md={4}>
+              <Form.Item label="Annee" style={{ marginBottom: 0 }}>
+                <Select
+                  value={annee}
+                  onChange={onAnnee}
+                  options={optionsAnnee}
+                  style={{ width: '100%' }}
+                />
+              </Form.Item>
+            </Col>
+          </Row>
+        </Form>
+      </Card>
 
       {!selected ? (
-        <div className="empty-state">
-          <div className="empty-state-icon"><LuTriangleAlert className="icon" /></div>
-          <h3>Selectionnez un contribuable</h3>
-          <p>Choisissez un contribuable pour afficher ses penalites</p>
-        </div>
+        <EmptyState
+          icone={<WarningOutlined style={{ fontSize: 32, color: '#EA580C' }} />}
+          titre="Selectionnez un contribuable"
+          texte="Choisissez un contribuable pour afficher ses penalites"
+        />
       ) : loading ? (
         <>
-          <SkeletonStatsGrid count={4} />
-          <SkeletonTable rows={4} cols={6} />
+          <SkeletonStatsGrid count={3} />
+          <SkeletonTable rows={4} cols={8} />
         </>
       ) : (
         <>
-          <div className="cards-grid" style={{ marginBottom: 24 }}>
-            <PenaliteCard icone={LuDollarSign} label="Total du" valeur={s.totalDu} suffixe=" Ar" tone="ir-du" />
-            <PenaliteCard icone={LuTriangleAlert} label="Amendes depot" valeur={s.totalAmendesDepot} suffixe=" Ar" tone="orange" />
-            <PenaliteCard icone={LuPercent} label="Majorations" valeur={s.totalMajorations} suffixe=" Ar" />
-            <PenaliteCard icone={LuCircleCheck} label="Payees" valeur={s.totalPayees} suffixe=" Ar" tone="encaisse" />
-          </div>
+          <Row gutter={[16, 16]}>
+            <Col xs={12} md={8}>
+              <PenaliteCard
+                icone={WarningOutlined}
+                label="Total du"
+                valeur={totalDu}
+                suffixe=" Ar"
+                tone="ir-du"
+              />
+            </Col>
+            <Col xs={12} md={8}>
+              <PenaliteCard
+                icone={CheckCircleOutlined}
+                label="Total paye"
+                valeur={totalPaye}
+                suffixe=" Ar"
+                tone="encaisse"
+              />
+            </Col>
+            <Col xs={24} md={8}>
+              <PenaliteCard
+                icone={ClockCircleOutlined}
+                label="En attente"
+                valeur={enAttente}
+                suffixe=" Ar"
+                tone="orange"
+              />
+            </Col>
+          </Row>
 
-          <h3 className="section-title"><LuTriangleAlert className="section-icon" /> Historique</h3>
-          {s.penalites.length === 0 ? (
-            <div className="empty-state" style={{ padding: 24 }}>
-              <p>Aucune penalite pour cette annee</p>
-            </div>
-          ) : (
-            <div className="table-container">
-              <table className="data-table">
-                <thead>
-                  <tr>
-                    <th>Echeance</th>
-                    <th>Type</th>
-                    <th>Base</th>
-                    <th>Taux</th>
-                    <th>Retard</th>
-                    <th>Montant</th>
-                    <th>Statut</th>
-                    <th>Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {s.penalites.map((p) => (
-                    <tr key={p.idPenalite}>
-                      <td>{p.dateLimite || '-'}</td>
-                      <td><span className="badge badge-warning" style={{ fontSize: 11 }}>{p.type}</span></td>
-                      <td>{fmt(p.baseCalculAr)} Ar</td>
-                      <td>{p.tauxPct} %</td>
-                      <td>{p.nbMois ? p.nbMois + ' mois' : '-'}</td>
-                      <td><strong>{fmt(p.montantAr)} Ar</strong></td>
-                      <td>
-                        <span className={'badge badge-' + (STATUT_BADGE[p.statut] || 'info')}>{p.statut}</span>
-                      </td>
-                      <td>
-                        <div className="row-actions">
-                          {p.statut === 'DUE' && (
-                            <>
-                              <button className="btn-icon" title="Regler" onClick={() => regler(p)}>
-                                <LuCircleCheck className="icon" />
-                              </button>
-                              <button className="btn-icon" title="Remise gracieuse" onClick={() => setRemise(p)}>
-                                <LuHandHeart className="icon" />
-                              </button>
-                              <button className="btn-icon delete" title="Annuler" onClick={() => annuler(p)}>
-                                <LuCircleX className="icon" />
-                              </button>
-                            </>
-                          )}
-                          <button className="btn-icon" title="Telecharger l avis"
-                            onClick={() => window.print()}>
-                            <LuPrinter className="icon" />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-
-          <h3 className="section-title" style={{ marginTop: 24 }}>Decompte detaille</h3>
-          {s.penalites.map((p) => (
-            <DecompteDetail key={'d-' + p.idPenalite} detail={p} />
-          ))}
+          <Card
+            size="small"
+            title="Historique des penalites"
+            extra={<span className="muted">{penalitesFiltrees.length} resultat(s)</span>}
+          >
+            {penalitesFiltrees.length === 0 ? (
+              <EmptyState
+                titre="Aucune penalite"
+                texte="Aucune penalite ne correspond aux filtres selectionnes."
+              />
+            ) : (
+              <Table
+                rowKey="idPenalite"
+                size="medium"
+                columns={colonnes}
+                dataSource={penalitesFiltrees}
+                pagination={{ pageSize: 10, showSizeChanger: true }}
+                locale={{ emptyText: 'Aucune penalite' }}
+                expandable={{
+                  expandedRowKeys: expandes,
+                  onExpandedRowsChange: setExpandes,
+                  showExpandColumn: false,
+                  expandedRowRender: (p) => <DecompteDetail detail={p} />,
+                }}
+              />
+            )}
+          </Card>
         </>
       )}
 

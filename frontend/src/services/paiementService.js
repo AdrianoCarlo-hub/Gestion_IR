@@ -5,6 +5,14 @@ export const lister = async () => {
   return data;
 };
 
+// Detail du montant a regler avant enregistrement
+export const recap = async (idDeclaration, typeReglement, date) => {
+  const params = { typeReglement };
+  if (date) params.date = date;
+  const { data } = await api.get('/paiements/recap/' + idDeclaration, { params });
+  return data;
+};
+
 export const parContribuable = async (id) => {
   const { data } = await api.get('/paiements/contribuable/' + id);
   return data;

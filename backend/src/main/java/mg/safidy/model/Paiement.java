@@ -36,6 +36,9 @@ public class Paiement {
     @Column(name = "type_paiement", nullable = false, length = 20)
     private String typePaiement;
 
+    @Column(name = "type_reglement", nullable = false, length = 20)
+    private String typeReglement = "TOUS";
+
     @Column(name = "montant_ar", nullable = false)
     private Long montantAr;
 
@@ -102,6 +105,14 @@ public class Paiement {
 
     public void setTypePaiement(String typePaiement) {
         this.typePaiement = typePaiement;
+    }
+
+    public String getTypeReglement() {
+        return typeReglement;
+    }
+
+    public void setTypeReglement(String typeReglement) {
+        this.typeReglement = typeReglement;
     }
 
     public Long getMontantAr() {

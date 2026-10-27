@@ -1,18 +1,17 @@
 import { useMemo, useState } from 'react';
+import { Col, Form, InputNumber, Row, Typography } from 'antd';
+import { formatAr } from '../../utils/format';
 
-const fmt = (n) => (n == null ? '0' : Number(n).toLocaleString('fr-FR').replace(/\u202f|\u00a0/g, ' '));
+const { Text, Title } = Typography;
 
 /**
- * Simulateur de liquidation de l'IR.
- * Estimation : base = CA - charges ; IR = base x 20 % (droit commun), puis
+ * Simulateur de liquidation de l IR.
+ * Estimation : base = CA - charges ; IR = base x taux (20 % par defaut), puis
  * comparaison avec le cumul des acomptes deja verses.
  */
-export default function SimulateurLiquidation({
-  cumulAcomptes = 0,
-  tauxDefaut = 20,
-}) {
-  const [ca, setCa] = useState('');
-  const [charges, setCharges] = useState('');
+export default function SimulateurLiquidation({ cumulAcomptes = 0, tauxDefaut = 20 }) {
+  const [ca, setCa] = useState(null);
+  const [charges, setCharges] = useState(null);
   const [taux, setTaux] = useState(tauxDefaut);
 
   const resultat = useMemo(() => {
@@ -25,47 +24,89 @@ export default function SimulateurLiquidation({
     return { baseArrondie, ir, reste };
   }, [ca, charges, taux, cumulAcomptes]);
 
-  return (
-    <div className="simulateur-panel simulateur-grid">
-      <div className="simulateur-inputs">
-        <div className="simulateur-champ">
-          <div className="form-group">
-            <label className="form-label">CA previsionnel (Ar)</label>
-            <input type="number" className="form-input" value={ca}
-              onChange={(e) => setCa(e.target.value)} placeholder="0" />
-          </div>
-          <div className="form-group">
-            <label className="form-label">Charges ded. (Ar)</label>
-            <input type="number" className="form-input" value={charges}
-              onChange={(e) => setCharges(e.target.value)} placeholder="0" />
-          </div>
-          <div className="form-group">
-            <label className="form-label">Taux (%)</label>
-            <input type="number" className="form-input" value={taux}
-              onChange={(e) => setTaux(e.target.value)} />
-          </div>
-        </div>
-      </div>
+  const resultats = [
+    { label: 'Base imposable estimee', valeur: formatAr(resultat.baseArrondie) },
+    { label: 'IR estime', valeur: formatAr(resultat.ir) },
+    { label: 'Cumul acomptes verses', valeur: formatAr(cumulAcomptes) },
+    {
+      label: resultat.reste >= 0 ? 'Reste a payer' : 'Credit d impot',
+      valeur: formatAr(Math.abs(resultat.reste)),
+      couleur: resultat.reste > 0 ? '#DC2626' : '#0E7A55',
+    },
+  ];
 
-      <div className="simulateur-resultats">
-        <h3>Resultat estime</h3>
-            <div className="simulateur-ligne">
-              <span>Base imposable estimee</span>
-              <strong>{fmt(resultat.baseArrondie)} Ar</strong>
+  return (
+    <Row gutter={[16, 16]}>
+      <Col xs={24} md={12}>
+        <Form layout="vertical">
+          <Row gutter={[12, 0]}>
+            <Col xs={24} sm={8}>
+              <Form.Item label="CA previsionnel (Ar)">
+                <InputNumber
+                  style={{ width: '100%' }}
+                  value={ca}
+                  min={0}
+                  placeholder="0"
+                  onChange={setCa}
+                />
+              </Form.Item>
+            </Col>
+            <Col xs={24} sm={8}>
+              <Form.Item label="Charges deduites (Ar)">
+                <InputNumber
+                  style={{ width: '100%' }}
+                  value={charges}
+                  min={0}
+                  placeholder="0"
+                  onChange={setCharges}
+                />
+              </Form.Item>
+            </Col>
+            <Col xs={24} sm={8}>
+              <Form.Item label="Taux (%)">
+                <InputNumber
+                  style={{ width: '100%' }}
+                  value={taux}
+                  min={0}
+                  max={100}
+                  onChange={setTaux}
+                />
+              </Form.Item>
+            </Col>
+          </Row>
+        </Form>
+        <Text type="secondary" style={{ fontSize: 12 }}>
+          Estimation : base = CA - charges ; IR = base x taux, comparee au cumul des acomptes
+          verses.
+        </Text>
+      </Col>
+
+      <Col xs={24} md={12}>
+        <div style={{ background: '#f3f6f8', borderRadius: 10, padding: '14px 16px' }}>
+          <Title level={5} style={{ marginTop: 0, marginBottom: 10 }}>
+            Resultat estime
+          </Title>
+          {resultats.map((r, index) => (
+            <div
+              key={r.label}
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                gap: 12,
+                padding: '6px 0',
+                borderBottom:
+                  index === resultats.length - 1 ? 'none' : '1px solid #e6ecea',
+                fontSize: 13,
+              }}
+            >
+              <Text type="secondary">{r.label}</Text>
+              <Text strong style={r.couleur ? { color: r.couleur } : undefined}>
+                {r.valeur}
+              </Text>
             </div>
-            <div className="simulateur-ligne">
-              <span>IR estime</span>
-              <strong>{fmt(resultat.ir)} Ar</strong>
-            </div>
-            <div className="simulateur-ligne">
-              <span>Cumul acomptes verses</span>
-              <strong>{fmt(cumulAcomptes)} Ar</strong>
-            </div>
-            <div className={'simulateur-ligne ' + (resultat.reste > 0 ? 'reste-a-payer' : 'credit')}>
-              <span>{resultat.reste >= 0 ? 'Reste a payer' : 'Credit d impot'}</span>
-              <strong>{fmt(Math.abs(resultat.reste))} Ar</strong>
-            </div>
-      </div>
-    </div>
+          ))}
+        </div>
+      </Col>
+    </Row>
   );
 }

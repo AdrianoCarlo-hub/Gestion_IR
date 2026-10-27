@@ -1,5 +1,11 @@
 import { useState } from 'react';
-import { LuCirclePause, LuCirclePlay, LuCircleX, LuSend } from 'react-icons/lu';
+import { Card, Form, Row, Col, Input, Select, Radio, Button } from 'antd';
+import {
+  PauseCircleOutlined,
+  PlayCircleOutlined,
+  StopOutlined,
+  SendOutlined,
+} from '@ant-design/icons';
 
 const today = new Date().toISOString().slice(0, 10);
 
@@ -10,6 +16,36 @@ const MOTIFS = [
   { value: 'DIFFICULTE_FINANCIERE', label: 'Difficulte financiere' },
   { value: 'REORGANISATION', label: 'Reorganisation' },
   { value: 'AUTRE', label: 'Autre' },
+];
+
+const TYPES = [
+  {
+    value: 'VEILLEUSE',
+    label: (
+      <span>
+        <PauseCircleOutlined style={{ marginRight: 6 }} />
+        Mise en veilleuse
+      </span>
+    ),
+  },
+  {
+    value: 'CESSATION',
+    label: (
+      <span>
+        <StopOutlined style={{ marginRight: 6 }} />
+        Cessation definitive
+      </span>
+    ),
+  },
+  {
+    value: 'REPRISE',
+    label: (
+      <span>
+        <PlayCircleOutlined style={{ marginRight: 6 }} />
+        Reprise d activite
+      </span>
+    ),
+  },
 ];
 
 /**
@@ -23,8 +59,7 @@ export default function DeclarationForm({ onSoumettre, enCours, enCoursId }) {
   const [refDeclaration, setRefDeclaration] = useState('');
   const [justificatif, setJustificatif] = useState('');
 
-  const soumettre = (e) => {
-    e.preventDefault();
+  const soumettre = () => {
     if (type === 'REPRISE') {
       if (!enCoursId) return;
       onSoumettre('REPRISE', { dateReprise: date });
@@ -46,81 +81,82 @@ export default function DeclarationForm({ onSoumettre, enCours, enCoursId }) {
   };
 
   return (
-    <form className="form-panel declaration-form" onSubmit={soumettre} style={{ marginBottom: 16 }}>
-      <h3 className="section-title">Declaration d evenement</h3>
+    <Card title="Declaration d evenement" style={{ marginBottom: 16 }}>
+      <Form layout="vertical" onFinish={soumettre}>
+        <Form.Item label="Type d evenement">
+          <Radio.Group
+            optionType="button"
+            buttonStyle="solid"
+            value={type}
+            onChange={(e) => setType(e.target.value)}
+            options={TYPES.map((t) => ({
+              ...t,
+              disabled: t.value === 'REPRISE' ? !enCours : !!enCours,
+            }))}
+          />
+        </Form.Item>
 
-      <div className="radio-group">
-        <label className={'radio-card' + (type === 'VEILLEUSE' ? ' actif' : '')}>
-          <input type="radio" name="type" checked={type === 'VEILLEUSE'}
-            onChange={() => setType('VEILLEUSE')} disabled={!!enCours} />
-          <LuCirclePause className="icon" />
-          <span>Mise en veilleuse</span>
-        </label>
-        <label className={'radio-card' + (type === 'CESSATION' ? ' actif' : '')}>
-          <input type="radio" name="type" checked={type === 'CESSATION'}
-            onChange={() => setType('CESSATION')} disabled={!!enCours} />
-          <LuCircleX className="icon" />
-          <span>Cessation definitive</span>
-        </label>
-        <label className={'radio-card' + (type === 'REPRISE' ? ' actif' : '')}>
-          <input type="radio" name="type" checked={type === 'REPRISE'}
-            onChange={() => setType('REPRISE')} disabled={!enCours} />
-          <LuCirclePlay className="icon" />
-          <span>Reprise d activite</span>
-        </label>
-      </div>
+        <Row gutter={16}>
+          <Col xs={24} md={8}>
+            <Form.Item
+              label={type === 'REPRISE' ? 'Date de reprise' : 'Date d arret'}
+              required
+            >
+              <Input
+                type="date"
+                value={date}
+                max={today}
+                onChange={(e) => setDate(e.target.value)}
+              />
+            </Form.Item>
+          </Col>
 
-      <div className="form-row">
-        <div className="form-group">
-          <label className="form-label required">
-            {type === 'REPRISE' ? 'Date de reprise *' : 'Date d arret *'}
-          </label>
-          <input type="date" className="form-input" value={date}
-            onChange={(e) => setDate(e.target.value)} required />
-        </div>
+          {type === 'VEILLEUSE' && (
+            <>
+              <Col xs={24} md={8}>
+                <Form.Item label="Motif" required>
+                  <Select value={motif} onChange={setMotif} options={MOTIFS} />
+                </Form.Item>
+              </Col>
+              <Col xs={24} md={8}>
+                <Form.Item label="N° declaration ecrite">
+                  <Input
+                    value={refDeclaration}
+                    onChange={(e) => setRefDeclaration(e.target.value)}
+                  />
+                </Form.Item>
+              </Col>
+            </>
+          )}
 
-        {type === 'VEILLEUSE' && (
-          <>
-            <div className="form-group">
-              <label className="form-label required">Motif *</label>
-              <select className="form-input" value={motif}
-                onChange={(e) => setMotif(e.target.value)}>
-                {MOTIFS.map((m) => <option key={m.value} value={m.value}>{m.label}</option>)}
-              </select>
-            </div>
-            <div className="form-group">
-              <label className="form-label">N° declaration ecrite</label>
-              <input className="form-input" value={refDeclaration}
-                onChange={(e) => setRefDeclaration(e.target.value)} />
-            </div>
-          </>
-        )}
+          {type === 'CESSATION' && (
+            <>
+              <Col xs={24} md={8}>
+                <Form.Item label="Motif">
+                  <Select value={motif} onChange={setMotif} options={MOTIFS} />
+                </Form.Item>
+              </Col>
+              <Col xs={24} md={8}>
+                <Form.Item label="Justificatif (bilan de cloture)">
+                  <Input
+                    value={justificatif}
+                    onChange={(e) => setJustificatif(e.target.value)}
+                  />
+                </Form.Item>
+              </Col>
+            </>
+          )}
+        </Row>
 
-        {type === 'CESSATION' && (
-          <>
-            <div className="form-group">
-              <label className="form-label">Motif</label>
-              <select className="form-input" value={motif}
-                onChange={(e) => setMotif(e.target.value)}>
-                {MOTIFS.map((m) => <option key={m.value} value={m.value}>{m.label}</option>)}
-              </select>
-            </div>
-            <div className="form-group">
-              <label className="form-label">Justificatif (bilan de cloture)</label>
-              <input className="form-input" value={justificatif}
-                onChange={(e) => setJustificatif(e.target.value)} />
-            </div>
-          </>
-        )}
-      </div>
-
-      <div className="form-actions">
-        <button type="submit" className="btn btn-primary"
-          disabled={type === 'REPRISE' && !enCoursId}>
-          <LuSend className="icon" />
+        <Button
+          type="primary"
+          htmlType="submit"
+          icon={<SendOutlined />}
+          disabled={type === 'REPRISE' && !enCoursId}
+        >
           Soumettre la declaration
-        </button>
-      </div>
-    </form>
+        </Button>
+      </Form>
+    </Card>
   );
 }

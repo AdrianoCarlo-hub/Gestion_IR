@@ -1,12 +1,14 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { Card, Form, Input, Button, Typography, Alert, Checkbox, Space } from 'antd';
+import { LockOutlined, MailOutlined, SafetyCertificateOutlined } from '@ant-design/icons';
 import { useAuth } from '../context/AuthContext';
-import { LuMail, LuLock, LuEye, LuEyeOff, LuShieldCheck, LuLoader, LuCircleAlert } from 'react-icons/lu';
+import Logo from '../components/Logo';
+
+const { Title, Paragraph, Text } = Typography;
 
 export default function Login() {
-  const [email, setEmail] = useState('admin@safidy.mg');
-  const [motDePasse, setMotDePasse] = useState('admin1234');
-  const [showPassword, setShowPassword] = useState(false);
+  const [form] = Form.useForm();
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
@@ -14,121 +16,124 @@ export default function Login() {
   const navigate = useNavigate();
 
   useEffect(() => {
-    if (isAuth) {
-      navigate('/dashboard', { replace: true });
-    }
+    if (isAuth) navigate('/dashboard', { replace: true });
   }, [isAuth, navigate]);
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
+  const handleSubmit = async (values) => {
     setError('');
-
-    if (!email.includes('@')) {
-      setError('Adresse e-mail invalide');
-      return;
-    }
-
-    if (motDePasse.length < 8) {
-      setError('8 caracteres minimum');
-      return;
-    }
-
     setLoading(true);
-
     try {
-      await login(email, motDePasse);
+      await login(values.email, values.motDePasse);
       navigate('/dashboard', { replace: true });
     } catch (err) {
-      const msg = err.response?.data?.message
-        || (!err.response
-          ? 'Serveur inaccessible. Verifiez que le backend est demarre et que son URL est correcte.'
-          : 'Erreur de connexion. Reessayez.');
-      setError(msg);
+      setError(
+        err.response?.data?.message ||
+          (!err.response
+            ? 'Serveur inaccessible. Verifiez que le backend est demarre et que son URL est correcte.'
+            : 'Erreur de connexion. Reessayez.')
+      );
     } finally {
       setLoading(false);
     }
   };
 
-  const togglePasswordVisibility = () => {
-    setShowPassword((prev) => !prev);
-  };
-
   return (
     <div className="login-page">
-      <div className="login-blob login-blob-1" />
-      <div className="login-blob login-blob-2" />
+      <div className="login-shape login-shape-1" />
+      <div className="login-shape login-shape-2" />
+      <div className="login-shape login-shape-3" />
 
-      <form className={`login-card ${error ? 'login-card-error' : ''}`} onSubmit={handleSubmit}>
-        <div className="login-logo">
-          <LuShieldCheck />
+      <div className="login-wrapper">
+        <div className="login-brand">
+          <Logo size={60} repli="IR" fondRepli="#fff" couleurRepli="#0E7A55" />
+          <Title level={2} className="login-brand-title">
+            Gestion IR
+          </Title>
+
         </div>
 
-        <h1 className="login-title">Connexion agent</h1>
-        <p className="login-subtitle">Application reservee aux agents du centre fiscal</p>
+        <Card className="login-card" bordered={false}>
+          <Space direction="vertical" size={4} style={{ width: '100%', marginBottom: 24 }}>
+            <Title level={4} className="login-card-title">
+              <SafetyCertificateOutlined style={{ color: '#0E7A55', marginRight: 10 }} />
+              Connexion agent
+            </Title>
+            <Text type="secondary">Application reservee aux agents du centre fiscal</Text>
+          </Space>
 
-        {error && (
-          <div className="login-error" role="alert">
-            <LuCircleAlert />
-            <span>{error}</span>
-          </div>
-        )}
-
-        <div className="login-input-group">
-          <LuMail className="login-input-icon" />
-          <input
-            type="email"
-            className="login-input"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            placeholder="E-mail"
-            autoComplete="username"
-            disabled={loading}
-          />
-        </div>
-
-        <div className="login-input-group">
-          <LuLock className="login-input-icon" />
-          <input
-            type={showPassword ? 'text' : 'password'}
-            className="login-input"
-            value={motDePasse}
-            onChange={(e) => setMotDePasse(e.target.value)}
-            placeholder="Mot de passe"
-            autoComplete="current-password"
-            disabled={loading}
-          />
-          <button
-            type="button"
-            className="login-toggle-password"
-            onClick={togglePasswordVisibility}
-            aria-label={showPassword ? 'Masquer le mot de passe' : 'Afficher le mot de passe'}
-            disabled={loading}
-          >
-            {showPassword ? <LuEyeOff /> : <LuEye />}
-          </button>
-        </div>
-
-        <div className="login-options">
-          <label className="login-checkbox">
-            <input type="checkbox" />
-            <span>Souvenir de moi</span>
-          </label>
-          <a href="#" className="login-forgot" onClick={(e) => e.preventDefault()}>
-            Mot de passe oublie ?
-          </a>
-        </div>
-
-        <button type="submit" className="btn-login" disabled={loading}>
-          {loading ? (
-            <>
-              <LuLoader className="spin" />
-              <span>Connexion...</span>
-            </>
-          ) : (
-            'SE CONNECTER'
+          {error && (
+            <Alert
+              type="error"
+              showIcon
+              message={error}
+              style={{ marginBottom: 18 }}
+              closable
+              onClose={() => setError('')}
+            />
           )}
-        </button>
-      </form>
+
+          <Form
+            form={form}
+            layout="vertical"
+            initialValues={{ email: 'admin@safidy.mg', motDePasse: 'admin1234' }}
+            onFinish={handleSubmit}
+            size="large"
+          >
+            <Form.Item
+              name="email"
+              label="Adresse e-mail"
+              rules={[
+                { required: true, message: 'E-mail requis' },
+                { type: 'email', message: 'Adresse e-mail invalide' },
+              ]}
+            >
+              <Input
+                prefix={<MailOutlined style={{ color: '#8aa39c' }} />}
+                placeholder="votre.email@centre.mg"
+                autoComplete="username"
+                disabled={loading}
+              />
+            </Form.Item>
+
+            <Form.Item
+              name="motDePasse"
+              label="Mot de passe"
+              rules={[{ required: true, min: 8, message: '8 caracteres minimum' }]}
+            >
+              <Input.Password
+                prefix={<LockOutlined style={{ color: '#8aa39c' }} />}
+                placeholder="Mot de passe"
+                autoComplete="current-password"
+                disabled={loading}
+              />
+            </Form.Item>
+
+            <div className="login-options">
+              <Checkbox disabled={loading}>Souvenir de moi</Checkbox>
+              <a
+                href="#"
+                className="login-forgot"
+                onClick={(e) => e.preventDefault()}
+              >
+                Mot de passe oublie ?
+              </a>
+            </div>
+
+            <Button
+              type="primary"
+              htmlType="submit"
+              block
+              loading={loading}
+              size="large"
+              className="login-submit"
+            >
+              SE CONNECTER
+            </Button>
+          </Form>
+        </Card>
+
+ 
+      </div>
     </div>
   );
 }

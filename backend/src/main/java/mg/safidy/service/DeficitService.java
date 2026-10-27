@@ -3,10 +3,12 @@ package mg.safidy.service;
 import mg.safidy.exception.BusinessException;
 import mg.safidy.model.Contribuable;
 import mg.safidy.model.Deficit;
+import mg.safidy.model.ParametreFiscal;
 import mg.safidy.model.UtilisationDeficit;
 import mg.safidy.model.DeclarationIR;
 import mg.safidy.repository.ContribuableRepository;
 import mg.safidy.repository.DeficitRepository;
+import mg.safidy.repository.ParametreFiscalRepository;
 import mg.safidy.repository.UtilisationDeficitRepository;
 import mg.safidy.repository.DeclarationIRRepository;
 import org.springframework.stereotype.Service;
@@ -16,23 +18,29 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Optional;
 
 @Service
 public class DeficitService {
+
+    private static final int DUREE_REPORT_PAR_DEFAUT = 5;
 
     private final DeficitRepository deficitRepository;
     private final UtilisationDeficitRepository utilisationRepository;
     private final ContribuableRepository contribuableRepository;
     private final DeclarationIRRepository declarationRepository;
+    private final ParametreFiscalRepository parametreRepository;
 
     public DeficitService(DeficitRepository deficitRepository,
                            UtilisationDeficitRepository utilisationRepository,
                            ContribuableRepository contribuableRepository,
-                           DeclarationIRRepository declarationRepository) {
+                           DeclarationIRRepository declarationRepository,
+                           ParametreFiscalRepository parametreRepository) {
         this.deficitRepository = deficitRepository;
         this.utilisationRepository = utilisationRepository;
         this.contribuableRepository = contribuableRepository;
         this.declarationRepository = declarationRepository;
+        this.parametreRepository = parametreRepository;
     }
 
     public List<Deficit> listerTout() {
@@ -69,7 +77,9 @@ public class DeficitService {
 
     /**
      * Cree un deficit automatiquement a la suite d'une declaration deficitaire.
-     * Duree de report : 5 ans (parametrable).
+     * Duree de report : parametre DUREE_REPORT_DEFICIT (5 ans par defaut).
+     * Idempotent : un seul deficit par annee d'origine, montant recalcule
+     * tant qu'aucune imputation n'a ete effectuee.
      */
     @Transactional
     public Deficit creerAutomatique(Long idContribuable, Integer anneeOrigine, Long montant) {
@@ -79,16 +89,29 @@ public class DeficitService {
         Contribuable c = contribuableRepository.findById(idContribuable)
                 .orElseThrow(() -> new BusinessException("Contribuable introuvable"));
 
-        // Verifier qu'il n'y a pas deja un deficit pour cette annee
-        boolean existe = deficitRepository
+        int dureeReport = dureeReport();
+
+        Optional<Deficit> existant = deficitRepository
                 .findByContribuableIdContribuableOrderByAnneeOrigineAsc(idContribuable)
                 .stream()
-                .anyMatch(d -> d.getAnneeOrigine().equals(anneeOrigine));
-        if (existe) {
-            throw new BusinessException("Un deficit existe deja pour l annee " + anneeOrigine);
+                .filter(d -> d.getAnneeOrigine().equals(anneeOrigine))
+                .findFirst();
+
+        if (existant.isPresent()) {
+            Deficit d = existant.get();
+            boolean intact = d.getMontantUtilise() == null || d.getMontantUtilise() == 0L;
+            if (!intact) {
+                // Deja impute sur d'autres exercices : on ne modifie pas l'historique.
+                return d;
+            }
+            d.setMontantInitial(montant);
+            d.setMontantUtilise(0L);
+            d.setSolde(montant);
+            d.setAnneeExpiration(anneeOrigine + dureeReport);
+            d.setStatut("ACTIF");
+            return deficitRepository.save(d);
         }
 
-        int dureeReport = 5;
         Deficit d = new Deficit();
         d.setContribuable(c);
         d.setAnneeOrigine(anneeOrigine);
@@ -99,6 +122,49 @@ public class DeficitService {
         d.setStatut("ACTIF");
         d.setDateCreation(LocalDateTime.now());
         return deficitRepository.save(d);
+    }
+
+    /**
+     * Annule les imputations deja enregistrees sur une declaration.
+     * Permet un recalcul idempotent : l'ancien imputation est restituee
+     * aux deficits avant un nouveau passage.
+     */
+    @Transactional
+    public void reverserImputation(Long idDeclaration) {
+        if (idDeclaration == null) return;
+        List<UtilisationDeficit> utilisations =
+                utilisationRepository.findByDeclarationIdDeclaration(idDeclaration);
+        for (UtilisationDeficit u : utilisations) {
+            Deficit d = u.getDeficit();
+            if (d != null) {
+                long utilise = Math.max(0L,
+                        (d.getMontantUtilise() == null ? 0L : d.getMontantUtilise())
+                        - (u.getMontantImpute() == null ? 0L : u.getMontantImpute()));
+                d.setMontantUtilise(utilise);
+                d.setSolde(Math.max(0L, d.getMontantInitial() - utilise));
+                if (d.getSolde() > 0 && "EPUISE".equals(d.getStatut())) {
+                    d.setStatut("ACTIF");
+                }
+                deficitRepository.save(d);
+            }
+            utilisationRepository.delete(u);
+        }
+    }
+
+    /**
+     * Expirations puis mise a jour du total disponible (a appeler avant calcul).
+     */
+    @Transactional
+    public long preparerDeficitsDisponibles(Long idContribuable) {
+        expirerDeficits();
+        return calculerTotalDisponible(idContribuable);
+    }
+
+    public int dureeReport() {
+        return parametreRepository.findByCode("DUREE_REPORT_DEFICIT")
+                .map(ParametreFiscal::getValeur)
+                .map(java.math.BigDecimal::intValue)
+                .orElse(DUREE_REPORT_PAR_DEFAUT);
     }
 
     /**

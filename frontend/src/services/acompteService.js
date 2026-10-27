@@ -22,6 +22,12 @@ export const getSituation = async (idContribuable, annee) => {
   return data;
 };
 
+// Tableau des acomptes : une ligne par annee du contribuable
+export const situationParAnnee = async (idContribuable) => {
+  const { data } = await api.get('/acomptes/par-annee/' + idContribuable);
+  return data;
+};
+
 export const getEcheances = async (idContribuable, annee) => {
   const { data } = await api.get('/acomptes/echeances/' + idContribuable + '/' + annee);
   return data;

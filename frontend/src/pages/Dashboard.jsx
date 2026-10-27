@@ -1,22 +1,34 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import {
+  Card,
+  Row,
+  Col,
+  Statistic,
+  Progress,
+  Table,
+  Tag,
+  Button,
+  Alert,
+  Typography,
+} from 'antd';
+import {
+  TeamOutlined,
+  FileTextOutlined,
+  CreditCardOutlined,
+  CalendarOutlined,
+  WarningOutlined,
+  ClockCircleOutlined,
+} from '@ant-design/icons';
 import { useAuth } from '../context/AuthContext';
 import * as statService from '../services/statistiqueService';
+import * as impayeService from '../services/impayeService';
 import { LoadingBlock } from '../components/Spinner';
 import BarChartCard from '../components/charts/BarChartCard';
 import PieChartCard from '../components/charts/PieChartCard';
-import {
-  LuUsers,
-  LuFileText,
-  LuCreditCard,
-  LuCalendar,
-  LuTriangleAlert,
-  LuCircleAlert,
-  LuClock,
-} from 'react-icons/lu';
+import { formatAr } from '../utils/format';
 
-const fmt = (n) =>
-  n == null ? '0' : Number(n).toLocaleString('fr-FR').replace(/\u202f|\u00a0/g, ' ');
+const { Text } = Typography;
 
 export default function Dashboard() {
   const { agent } = useAuth();
@@ -25,6 +37,7 @@ export default function Dashboard() {
   const [parAnnee, setParAnnee] = useState([]);
   const [parStatut, setParStatut] = useState([]);
   const [alertes, setAlertes] = useState(null);
+  const [impayes, setImpayes] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
@@ -34,12 +47,14 @@ export default function Dashboard() {
       statService.parAnnee(),
       statService.parStatut(),
       statService.alertes().catch(() => null),
+      impayeService.lister(new Date().getFullYear()).catch(() => []),
     ])
-      .then(([r, a, s, al]) => {
+      .then(([r, a, s, al, im]) => {
         setStats(r);
         setParAnnee(a);
         setParStatut(s);
         setAlertes(al);
+        setImpayes(im);
       })
       .catch((e) => setError(e.response?.data?.message || 'Erreur de chargement'))
       .finally(() => setLoading(false));
@@ -51,181 +66,253 @@ export default function Dashboard() {
   const heure = new Date().getHours();
   const salutation = heure < 12 ? 'Bonjour' : heure < 18 ? 'Bon apres-midi' : 'Bonsoir';
 
-  return (
-    <div className="dashboard-page">
-      <header className="page-header">
-        <h1>Tableau de bord</h1>
-        <p className="page-sub">
-          {salutation} {agent?.prenom} {agent?.nom} — {agent?.role}
-        </p>
-      </header>
+  const impayesTries = [...(impayes || [])]
+    .sort((a, b) => (b.resteAPayer || 0) - (a.resteAPayer || 0))
+    .slice(0, 5);
 
-      {error && <div className="alert-error">{error}</div>}
+  const colonnesImpayes = [
+    {
+      title: 'Contribuable',
+      key: 'contribuable',
+      render: (_, r) => (
+        <div>
+          <Text strong>{r.raisonSociale}</Text>
+          <br />
+          <Text type="secondary">{r.nif}</Text>
+        </div>
+      ),
+    },
+    {
+      title: 'IR du',
+      dataIndex: 'irDu',
+      key: 'irDu',
+      align: 'right',
+      render: (v) => formatAr(v),
+    },
+    {
+      title: 'Reste a payer',
+      dataIndex: 'resteAPayer',
+      key: 'reste',
+      align: 'right',
+      render: (v) => (
+        <Text type="danger" strong>
+          {formatAr(v)}
+        </Text>
+      ),
+    },
+    {
+      title: '',
+      key: 'action',
+      width: 90,
+      render: () => (
+        <Button type="link" size="small" onClick={() => navigate('/recouvrement')}>
+          Relancer
+        </Button>
+      ),
+    },
+  ];
+
+  const colonnesEcheances = [
+    { title: 'Contribuable', dataIndex: 'raisonSociale', key: 'rs' },
+    {
+      title: 'Annee / n',
+      key: 'ref',
+      render: (_, a) => `${a.annee} n°${a.numero}`,
+    },
+    { title: 'Echeance', dataIndex: 'dateEcheance', key: 'echeance' },
+    {
+      title: 'Montant',
+      dataIndex: 'montant',
+      key: 'montant',
+      align: 'right',
+      render: (v) => formatAr(v),
+    },
+    {
+      title: 'Dans',
+      dataIndex: 'joursRestants',
+      key: 'jours',
+      render: (j) => (
+        <Tag color={j <= 7 ? 'red' : 'orange'}>{j} j</Tag>
+      ),
+    },
+  ];
+
+  return (
+    <div className="page">
+      <div className="page-header">
+        <div>
+          <h1 className="page-title">Tableau de bord</h1>
+          <p className="page-subtitle">
+            {salutation} {agent?.prenom} {agent?.nom} — {agent?.role}
+          </p>
+        </div>
+      </div>
+
+      {error && <Alert type="error" showIcon message={error} />}
 
       {stats && (
         <>
-          {/* 4 cartes KPI compactes */}
-          <div className="cards-grid">
-            <div className="stat-card">
-              <LuUsers className="stat-icon" size={20} />
-              <span className="stat-label">Contribuables</span>
-              <span className="stat-value">{stats.contribuables}</span>
-            </div>
-            <div className="stat-card">
-              <LuFileText className="stat-icon" size={20} />
-              <span className="stat-label">Declarations IR</span>
-              <span className="stat-value">{stats.declarations}</span>
-            </div>
-            <div className="stat-card">
-              <LuCreditCard className="stat-icon" size={20} />
-              <span className="stat-label">Paiements</span>
-              <span className="stat-value">{stats.paiements}</span>
-            </div>
-            <div className="stat-card">
-              <LuCalendar className="stat-icon" size={20} />
-              <span className="stat-label">Acomptes</span>
-              <span className="stat-value">{stats.acomptes}</span>
-            </div>
-          </div>
-
-          {/* 5 cartes financieres (ajout : en retard) */}
-          <div className="cards-grid financial" style={{ gridTemplateColumns: 'repeat(5, 1fr)' }}>
-            <div className="stat-card accent">
-              <span className="stat-label">IR total du ({annee})</span>
-              <span className="stat-value">{fmt(stats.irTotal)} Ar</span>
-            </div>
-            <div className="stat-card accent-green">
-              <span className="stat-label">Total encaisse</span>
-              <span className="stat-value">{fmt(stats.encaisse)} Ar</span>
-            </div>
-            <div className="stat-card accent-orange">
-              <span className="stat-label">Reste a payer</span>
-              <span className="stat-value">{fmt(stats.soldeAPayer)} Ar</span>
-            </div>
-            <div className="stat-card accent" style={{ borderLeftColor: '#dc2626' }}>
-              <LuCircleAlert className="stat-icon" size={20} style={{ color: '#dc2626' }} />
-              <span className="stat-label">Contribuables en retard</span>
-              <span className="stat-value" style={{ color: '#dc2626' }}>
-                {alertes ? alertes.nbContribuablesEnRetard : stats.nbEnRetard || 0}
-              </span>
-            </div>
-            <div className="stat-card accent">
-              <span className="stat-label">Taux de recouvrement</span>
-              <span className="stat-value">{stats.tauxRecouvrement} %</span>
-              <div className="progress-bar">
-                <div
-                  className="progress-fill"
-                  style={{ width: Math.min(stats.tauxRecouvrement, 100) + '%' }}
+          <Row gutter={[16, 16]}>
+            <Col xs={12} md={6}>
+              <Card>
+                <Statistic
+                  title="Contribuables"
+                  value={stats.contribuables}
+                  prefix={<TeamOutlined style={{ color: '#0E7A55' }} />}
                 />
-              </div>
-            </div>
-          </div>
+              </Card>
+            </Col>
+            <Col xs={12} md={6}>
+              <Card>
+                <Statistic
+                  title="Declarations IR"
+                  value={stats.declarations}
+                  prefix={<FileTextOutlined style={{ color: '#0369A1' }} />}
+                />
+              </Card>
+            </Col>
+            <Col xs={12} md={6}>
+              <Card>
+                <Statistic
+                  title="Paiements"
+                  value={stats.paiements}
+                  prefix={<CreditCardOutlined style={{ color: '#16A34A' }} />}
+                />
+              </Card>
+            </Col>
+            <Col xs={12} md={6}>
+              <Card>
+                <Statistic
+                  title="Acomptes"
+                  value={stats.acomptes}
+                  prefix={<CalendarOutlined style={{ color: '#EA580C' }} />}
+                />
+              </Card>
+            </Col>
+          </Row>
 
-          {/* Graphiques */}
-          <div className="charts-grid-2">
-            <BarChartCard
-              titre="IR du par annee"
-              data={parAnnee}
-              cleX="annee"
-              series={[
-                { dataKey: 'irDu', name: 'IR du', couleur: '#1a5c4a' },
-                { dataKey: 'soldeAPayer', name: 'Solde a payer', couleur: '#f59e0b' },
-              ]}
-            />
-            <PieChartCard
-              titre="Declarations par statut"
-              data={parStatut}
-              cleNom="statut"
-              cleValeur="nombre"
-            />
-          </div>
+          <Row gutter={[16, 16]}>
+            <Col xs={24} md={8} lg={4} xl={4}>
+              <Card>
+                <Statistic title={`IR total du (${annee})`} value={stats.irTotal} precision={0} suffix="Ar" valueStyle={{ fontSize: 18 }} />
+              </Card>
+            </Col>
+            <Col xs={24} md={8} lg={5} xl={5}>
+              <Card>
+                <Statistic
+                  title="Total encaisse"
+                  value={stats.encaisse}
+                  precision={0}
+                  suffix="Ar"
+                  valueStyle={{ color: '#16A34A', fontSize: 18 }}
+                />
+              </Card>
+            </Col>
+            <Col xs={24} md={8} lg={5} xl={5}>
+              <Card>
+                <Statistic
+                  title="Reste a payer"
+                  value={stats.soldeAPayer}
+                  precision={0}
+                  suffix="Ar"
+                  valueStyle={{ color: '#EA580C', fontSize: 18 }}
+                />
+              </Card>
+            </Col>
+            <Col xs={12} md={6} lg={5} xl={5}>
+              <Card>
+                <Statistic
+                  title="Contribuables en retard"
+                  value={
+                    alertes ? alertes.nbContribuablesEnRetard : stats.nbEnRetard || 0
+                  }
+                  prefix={<WarningOutlined style={{ color: '#DC2626' }} />}
+                  valueStyle={{ color: '#DC2626', fontSize: 18 }}
+                />
+              </Card>
+            </Col>
+            <Col xs={12} md={6} lg={5} xl={5}>
+              <Card title="Taux de recouvrement" size="small">
+                <Text strong style={{ fontSize: 18 }}>
+                  {stats.tauxRecouvrement} %
+                </Text>
+                <Progress
+                  percent={Math.min(Number(stats.tauxRecouvrement) || 0, 100)}
+                  showInfo={false}
+                  strokeColor="#0E7A55"
+                  size="small"
+                />
+              </Card>
+            </Col>
+          </Row>
 
-          {/* Section Alertes */}
-          {alertes && (
-            <div className="charts-grid-2">
-              {/* Top 5 impayes */}
-              <div className="chart-card">
-                <h3 className="chart-title">
-                  <LuTriangleAlert size={14} style={{ marginRight: 8, color: '#dc2626' }} />
-                  Top 5 des impayes ({fmt(alertes.montantTotalImpaye)} Ar au total)
-                </h3>
-                {alertes.top5Impayes.length === 0 ? (
-                  <p style={{ color: '#94a3b8', fontSize: 13, padding: 12 }}>
-                    Aucun impaye
-                  </p>
-                ) : (
-                  <table className="data-table">
-                    <thead>
-                      <tr>
-                        <th>NIF</th>
-                        <th>Contribuable</th>
-                        <th>Solde</th>
-                        <th></th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {alertes.top5Impayes.map((c) => (
-                        <tr key={c.idContribuable}>
-                          <td><strong>{c.nif}</strong></td>
-                          <td>{c.raisonSociale}</td>
-                          <td style={{ color: '#dc2626', fontWeight: 600 }}>
-                            {fmt(c.soldeAPayer)} Ar
-                          </td>
-                          <td>
-                            <button
-                              className="btn-link"
-                              onClick={() => navigate('/contribuables/' + c.idContribuable)}
-                            >
-                              Voir
-                            </button>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+          <Row gutter={[16, 16]}>
+            <Col xs={24} lg={14}>
+              <BarChartCard
+                titre="IR du par annee"
+                data={parAnnee}
+                cleX="annee"
+                series={[
+                  { dataKey: 'irDu', name: 'IR du', couleur: '#0E7A55' },
+                  { dataKey: 'soldeAPayer', name: 'Solde a payer', couleur: '#F59E0B' },
+                ]}
+              />
+            </Col>
+            <Col xs={24} lg={10}>
+              <PieChartCard
+                titre="Declarations par statut"
+                data={parStatut}
+                cleNom="statut"
+                cleValeur="nombre"
+              />
+            </Col>
+          </Row>
+
+          {(alertes || impayes) && (
+            <Row gutter={[16, 16]}>
+              <Col xs={24} lg={12}>
+                <Card
+                  title={
+                    <span>
+                      <WarningOutlined style={{ color: '#DC2626', marginRight: 8 }} />
+                      Top 5 des impayes (
+                      {formatAr((impayes || []).reduce((t, i) => t + (i.resteAPayer || 0), 0))} a
+                      recouvrer)
+                    </span>
+                  }
+                >
+                  <Table
+                    size="small"
+                    rowKey="idDeclaration"
+                    columns={colonnesImpayes}
+                    dataSource={impayesTries}
+                    pagination={false}
+                    locale={{ emptyText: 'Aucun impaye' }}
+                  />
+                </Card>
+              </Col>
+              <Col xs={24} lg={12}>
+                {alertes && (
+                <Card
+                  title={
+                    <span>
+                      <ClockCircleOutlined style={{ color: '#F59E0B', marginRight: 8 }} />
+                      Echeances dans les 30 jours ({alertes.acomptesAvenir.length})
+                    </span>
+                  }
+                >
+                  <Table
+                    size="small"
+                    rowKey="idAcompte"
+                    columns={colonnesEcheances}
+                    dataSource={alertes.acomptesAvenir}
+                    pagination={false}
+                    locale={{ emptyText: 'Aucune echeance imminente' }}
+                  />
+                </Card>
                 )}
-              </div>
-
-              {/* Echeances proches */}
-              <div className="chart-card">
-                <h3 className="chart-title">
-                  <LuClock size={14} style={{ marginRight: 8, color: '#f59e0b' }} />
-                  Echeances dans les 30 jours ({alertes.acomptesAvenir.length})
-                </h3>
-                {alertes.acomptesAvenir.length === 0 ? (
-                  <p style={{ color: '#94a3b8', fontSize: 13, padding: 12 }}>
-                    Aucune echeance imminente
-                  </p>
-                ) : (
-                  <table className="data-table">
-                    <thead>
-                      <tr>
-                        <th>Contribuable</th>
-                        <th>N°</th>
-                        <th>Echeance</th>
-                        <th>Montant</th>
-                        <th>Dans</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {alertes.acomptesAvenir.map((a) => (
-                        <tr key={a.idAcompte}>
-                          <td>{a.raisonSociale}</td>
-                          <td>{a.annee} n°{a.numero}</td>
-                          <td>{a.dateEcheance}</td>
-                          <td>{fmt(a.montant)} Ar</td>
-                          <td>
-                            <span className={'badge ' + (a.joursRestants <= 7 ? 'badge-radie' : 'badge-suspendu')}>
-                              {a.joursRestants} j
-                            </span>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                )}
-              </div>
-            </div>
+              </Col>
+            </Row>
           )}
         </>
       )}

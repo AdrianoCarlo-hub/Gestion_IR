@@ -1,11 +1,39 @@
 import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import {
+  Alert,
+  Button,
+  Card,
+  Col,
+  Descriptions,
+  Input,
+  InputNumber,
+  Row,
+  Select,
+  Space,
+  Statistic,
+  Steps,
+  Table,
+  Tag,
+  Typography,
+} from 'antd';
+import {
+  ArrowLeftOutlined,
+  CalculatorOutlined,
+  CheckCircleOutlined,
+  DeleteOutlined,
+  FilePdfOutlined,
+  PlusOutlined,
+  SaveOutlined,
+} from '@ant-design/icons';
 import * as service from '../services/declarationService';
+import * as exportService from '../services/exportService';
 import ConfirmDialog from '../components/ConfirmDialog';
 import { LoadingBlock } from '../components/Spinner';
 import { useToast } from '../context/ToastContext';
+import { formatAr, STATUT_DECLARATION } from '../utils/format';
 
-const fmt = (n) =>
-  n == null ? '0' : Number(n).toLocaleString('fr-FR').replace(/\u202f|\u00a0/g, ' ');
+const { Text, Title } = Typography;
 
 const CATEGORIES = [
   { value: 'SALAIRE', label: 'Salaire' },
@@ -15,7 +43,6 @@ const CATEGORIES = [
   { value: 'AUTRE', label: 'Autre' },
 ];
 
-// Affiche la categorie : libelle standard, ou categorie_libre si AUTRE
 const afficherCategorie = (c) => {
   if (c.categorie === 'AUTRE') {
     return c.categorieLibre ? 'AUTRE : ' + c.categorieLibre : 'AUTRE';
@@ -26,23 +53,21 @@ const afficherCategorie = (c) => {
 
 export default function DeclarationForm({ idDeclaration, onRetour }) {
   const toast = useToast();
+  const navigate = useNavigate();
   const [confirm, setConfirm] = useState(null);
   const [declaration, setDeclaration] = useState(null);
   const [charges, setCharges] = useState([]);
   const [caHt, setCaHt] = useState(0);
   const [moisActifs, setMoisActifs] = useState(12);
-  const [reintegrations, setReintegrations] = useState(0);
-  const [deductions, setDeductions] = useState(0);
-  const [acomptes, setAcomptes] = useState(0);
-
-  // Formulaire d'ajout de charge
-  const [newCat, setNewCat] = useState('SALAIRE');
-  const [newCategorieLibre, setNewCategorieLibre] = useState('');
-  const [newMontant, setNewMontant] = useState('');
-  const [newJustif, setNewJustif] = useState('');
-
+  const [nouvelleCharge, setNouvelleCharge] = useState({
+    categorie: 'SALAIRE',
+    categorieLibre: '',
+    montant: null,
+    justificatif: '',
+  });
+  const [tentativeAjout, setTentativeAjout] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
+  const [enregistrementBrouillon, setEnregistrementBrouillon] = useState(false);
 
   const charger = async () => {
     try {
@@ -50,17 +75,15 @@ export default function DeclarationForm({ idDeclaration, onRetour }) {
       setDeclaration(d);
       setCaHt(d.caHt || 0);
       setMoisActifs(d.moisActifs == null ? 12 : d.moisActifs);
-      setReintegrations(d.totalReintegrations || 0);
-      setDeductions(d.totalDeductions || 0);
-      setAcomptes(d.acomptesVerses || 0);
       const c = await service.listerCharges(idDeclaration);
       setCharges(c);
     } catch (e) {
-      setError(e.response?.data?.message || 'Erreur de chargement');
+      toast.error(e.response?.data?.message || 'Erreur de chargement');
     }
   };
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     charger();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [idDeclaration]);
@@ -68,9 +91,8 @@ export default function DeclarationForm({ idDeclaration, onRetour }) {
   const verrouille = declaration && declaration.statut !== 'BROUILLON';
 
   const handleSauverCa = async () => {
-    setError('');
     try {
-      await service.modifierCaHt(idDeclaration, Number(caHt));
+      await service.modifierCaHt(idDeclaration, Number(caHt) || 0);
       toast.success('Chiffre d affaires enregistre');
       charger();
     } catch (e) {
@@ -79,10 +101,9 @@ export default function DeclarationForm({ idDeclaration, onRetour }) {
   };
 
   const handleSauverMoisActifs = async () => {
-    setError('');
     const valeur = Number(moisActifs);
     if (Number.isNaN(valeur) || valeur < 0 || valeur > 12) {
-      setError('Mois actifs : valeur de 0 a 12');
+      toast.error('Mois actifs : valeur de 0 a 12');
       return;
     }
     try {
@@ -94,29 +115,30 @@ export default function DeclarationForm({ idDeclaration, onRetour }) {
     }
   };
 
-  const handleAjouterCharge = async (e) => {
-    e.preventDefault();
-    setError('');
-
-    if (!newMontant || Number(newMontant) <= 0) {
-      setError('Montant > 0 obligatoire');
+  const handleAjouterCharge = async () => {
+    const { categorie, categorieLibre, montant, justificatif } = nouvelleCharge;
+    setTentativeAjout(true);
+    if (montant == null || Number(montant) <= 0) {
+      toast.error('Montant (Ar) obligatoire et > 0');
       return;
     }
-    if (newCat === 'AUTRE' && !newCategorieLibre.trim()) {
-      setError('Precisez la categorie libre (ex: Fournitures)');
+    if (!justificatif || !justificatif.trim()) {
+      toast.error('Numero de facture obligatoire');
       return;
     }
-
+    if (categorie === 'AUTRE' && !categorieLibre.trim()) {
+      toast.error('Precisez la categorie libre (ex: Fournitures)');
+      return;
+    }
     try {
       await service.ajouterCharge(idDeclaration, {
-        categorie: newCat,
-        categorieLibre: newCat === 'AUTRE' ? newCategorieLibre.trim() : null,
-        montantAr: Number(newMontant),
-        justificatifRef: newJustif || null,
+        categorie,
+        categorieLibre: categorie === 'AUTRE' ? categorieLibre.trim() : null,
+        montantAr: Number(montant),
+        justificatifRef: justificatif.trim(),
       });
-      setNewMontant('');
-      setNewCategorieLibre('');
-      setNewJustif('');
+      setNouvelleCharge({ categorie: 'SALAIRE', categorieLibre: '', montant: null, justificatif: '' });
+      setTentativeAjout(false);
       toast.success('Charge ajoutee');
       charger();
     } catch (e) {
@@ -143,15 +165,10 @@ export default function DeclarationForm({ idDeclaration, onRetour }) {
   };
 
   const handleCalculer = async () => {
-    setError('');
     setLoading(true);
     try {
-      await service.modifierCaHt(idDeclaration, Number(caHt));
-      const d = await service.calculer(idDeclaration, {
-        totalReintegrations: Number(reintegrations),
-        totalDeductions: Number(deductions),
-        acomptesVerses: Number(acomptes),
-      });
+      await service.modifierCaHt(idDeclaration, Number(caHt) || 0);
+      const d = await service.calculer(idDeclaration, {});
       setDeclaration(d);
       toast.success('Calcul effectue avec succes');
     } catch (e) {
@@ -161,16 +178,44 @@ export default function DeclarationForm({ idDeclaration, onRetour }) {
     }
   };
 
+  const handleEnregistrerBrouillon = async () => {
+    setEnregistrementBrouillon(true);
+    try {
+      const caValeur = Number(caHt) || 0;
+      const moisValeur = Number(moisActifs);
+      if (caValeur > 0 && caValeur !== (declaration.caHt || 0)) {
+        await service.modifierCaHt(idDeclaration, caValeur);
+      }
+      if (
+        !Number.isNaN(moisValeur) &&
+        moisValeur >= 0 &&
+        moisValeur <= 12 &&
+        moisValeur !== (declaration.moisActifs ?? 12)
+      ) {
+        await service.modifierMoisActifs(idDeclaration, moisValeur);
+      }
+      await charger();
+      toast.success('Brouillon enregistre. Vous pouvez revenir plus tard.');
+    } catch (e) {
+      toast.error(e.response?.data?.message || 'Erreur d enregistrement');
+    } finally {
+      setEnregistrementBrouillon(false);
+    }
+  };
+
   const handleValider = () => {
     setConfirm({
       titre: 'Valider la declaration',
-      message: 'Valider cette declaration ? Les acomptes de l annee suivante seront generes.',
+      message:
+        'Valider cette declaration ? Les acomptes de l annee suivante seront generes.',
       texteConfirmer: 'Valider',
       onConfirmer: async () => {
         try {
           const d = await service.valider(idDeclaration);
           setDeclaration(d);
           toast.success('Declaration validee. Acomptes generes.');
+          navigate('/declarations');
+          if (onRetour) onRetour();
         } catch (e) {
           toast.error(e.response?.data?.message || 'Erreur');
         }
@@ -183,299 +228,370 @@ export default function DeclarationForm({ idDeclaration, onRetour }) {
   }
 
   const totalChargesAffiche = charges.reduce((s, c) => s + (c.montantAr || 0), 0);
+  const taux = declaration.tauxIr == null ? 20 : Number(declaration.tauxIr);
+  const penalites = declaration.penaliteDueAr || 0;
+  const premierAcompte = declaration.premierAcompteAr || 0;
+  const acomptesVerses = declaration.acomptesVerses || 0;
+  const totalAPayer =
+    (declaration.irDu || 0) + penalites + premierAcompte - acomptesVerses;
+  const soldeAffiche = declaration.soldeAPayer || 0;
+  const credit = declaration.creditImpot || 0;
+
+  const statutDef = STATUT_DECLARATION[declaration.statut] || {
+    couleur: 'default',
+    libelle: declaration.statut,
+  };
+
+  const etapesResultat = [
+    { label: '1. CA HT', valeur: formatAr(declaration.caHt) },
+    { label: '2. Charges deductibles', valeur: formatAr(declaration.totalCharges) },
+    { label: '3. Resultat comptable', valeur: formatAr(declaration.resultatComptable) },
+    { label: '4. Reintegrations', valeur: formatAr(declaration.totalReintegrations) },
+    { label: '5. Deductions', valeur: formatAr(declaration.totalDeductions) },
+    { label: '6. Deficit impute', valeur: formatAr(declaration.deficitImpute) },
+    { label: '7. Base imposable', valeur: formatAr(declaration.baseImposable) },
+    { label: `8. IR brut (${taux} %)`, valeur: formatAr(declaration.irBrut) },
+    { label: '9. Minimum de perception', valeur: formatAr(declaration.minimumPerception) },
+    { label: '10. IR du', valeur: formatAr(declaration.irDu), fort: true },
+    {
+      label: '11. Solde (IR + penalites + 1er acompte - acomptes)',
+      valeur: formatAr(totalAPayer),
+      fort: true,
+    },
+    {
+      label: '12. Resultat net',
+      valeur:
+        soldeAffiche > 0
+          ? 'Solde a payer : ' + formatAr(soldeAffiche)
+          : credit > 0
+            ? 'Credit d impot : ' + formatAr(credit)
+            : 'N a payer',
+      final: true,
+      solde: soldeAffiche > 0,
+      credit: credit > 0,
+    },
+  ];
+
+  const colonnesCharges = [
+    {
+      title: 'Categorie',
+      dataIndex: 'categorie',
+      render: (_, c) => afficherCategorie(c),
+    },
+    {
+      title: 'Montant',
+      dataIndex: 'montantAr',
+      align: 'right',
+      width: 160,
+      render: formatAr,
+    },
+    {
+      title: 'N facture',
+      dataIndex: 'justificatifRef',
+      render: (v) =>
+        v ? (
+          <Text>{v}</Text>
+        ) : (
+          <Text type="warning" italic>
+            Non renseigne
+          </Text>
+        ),
+    },
+    ...(verrouille
+      ? []
+      : [
+          {
+            title: '',
+            width: 110,
+            align: 'center',
+            render: (_, c) => (
+              <Button
+                type="link"
+                danger
+                size="small"
+                icon={<DeleteOutlined />}
+                onClick={() => handleSupprimerCharge(c.idLigne)}
+              >
+                Supprimer
+              </Button>
+            ),
+          },
+        ]),
+  ];
 
   return (
     <>
-      <div className="decl-header">
+      <div className="page-header">
         <div>
-          <h2 className="form-title">
+          <Button
+            type="text"
+            icon={<ArrowLeftOutlined />}
+            onClick={onRetour}
+            style={{ marginBottom: 4, paddingInline: 0 }}
+          >
+            Retour a la liste
+          </Button>
+          <Title level={4} style={{ margin: 0 }}>
             {declaration.contribuable?.raisonSociale} — Exercice {declaration.annee}
-          </h2>
-          <p className="page-sub">
-            NIF : {declaration.contribuable?.nif} — Statut :{' '}
-            <span className={'badge badge-' + (declaration.statut || '').toLowerCase()}>
-              {declaration.statut}
-            </span>
-          </p>
+          </Title>
+          <Text type="secondary">
+            NIF : {declaration.contribuable?.nif} —{' '}
+            <Tag color={statutDef.couleur} style={{ marginInlineStart: 4 }}>
+              {statutDef.libelle}
+            </Tag>
+          </Text>
         </div>
-        <button className="btn-secondary" onClick={onRetour}>Retour a la liste</button>
+        <Space>
+          <Button
+            icon={<FilePdfOutlined />}
+            onClick={() => exportService.exportFichePdf(idDeclaration)}
+          >
+            Fiche de declaration (PDF)
+          </Button>
+        </Space>
       </div>
-
-      {error && <div className="alert-error" style={{ marginBottom: 16 }}>{error}</div>}
 
       {verrouille && (
-        <div className="alert-warning" style={{ marginBottom: 16 }}>
-          Cette declaration est {declaration.statut} — elle n est plus modifiable.
-        </div>
+        <Alert
+          type="warning"
+          showIcon
+          style={{ marginBottom: 16 }}
+          message={`Cette declaration est ${declaration.statut} — elle n est plus modifiable.`}
+        />
       )}
 
-      <div className="decl-grid">
-        <div>
-          <div className="form-panel" style={{ marginBottom: 16 }}>
-            <h3 className="section-title">Chiffre d affaires</h3>
-            <div className="form-row">
-              <div className="form-group" style={{ flex: 2 }}>
-                <label className="form-label">CA HT (Ar) *</label>
-                <input
-                  type="number"
-                  className="form-input"
-                  value={caHt}
-                  onChange={(e) => setCaHt(e.target.value)}
-                  disabled={verrouille}
-                  min={0}
-                />
-              </div>
-              {!verrouille && (
-                <div className="form-group" style={{ flex: 0, justifyContent: 'flex-end' }}>
-                  <button className="btn-primary" onClick={handleSauverCa}>Enregistrer CA</button>
-                </div>
-              )}
-            </div>
-          </div>
+      <Row gutter={[16, 16]}>
+        <Col xs={24} lg={15}>
+          <Card
+            size="small"
+            title="Chiffre d affaires"
+            style={{ marginBottom: 16 }}
+            extra={
+              !verrouille && (
+                <Button size="small" icon={<SaveOutlined />} onClick={handleSauverCa}>
+                  Enregistrer
+                </Button>
+              )
+            }
+          >
+            <Space.Compact style={{ width: '100%' }}>
+              <InputNumber
+                value={caHt}
+                onChange={(v) => setCaHt(v ?? 0)}
+                min={0}
+                step={100000}
+                style={{ width: '100%' }}
+                disabled={verrouille}
+                addonAfter="Ar"
+                placeholder="CA HT"
+              />
+            </Space.Compact>
+          </Card>
 
-          <div className="form-panel" style={{ marginBottom: 16 }}>
-            <h3 className="section-title">Charges ({charges.length})</h3>
-            <table className="data-table" style={{ marginBottom: 12 }}>
-              <thead>
-                <tr>
-                  <th>Categorie</th>
-                  <th>Montant</th>
-                  <th>N Facture</th>
-                  {!verrouille && <th></th>}
-                </tr>
-              </thead>
-              <tbody>
-                {charges.length === 0 ? (
-                  <tr>
-                    <td colSpan={verrouille ? 3 : 4} style={{ textAlign: 'center' }}>
-                      Aucune charge
-                    </td>
-                  </tr>
-                ) : (
-                  charges.map((c) => (
-                    <tr key={c.idLigne}>
-                      <td>{afficherCategorie(c)}</td>
-                      <td>{fmt(c.montantAr)} Ar</td>
-                      <td>
-                        {c.justificatifRef ? (
-                          c.justificatifRef
-                        ) : (
-                          <span style={{ color: '#f59e0b', fontStyle: 'italic' }}>
-                            Non renseigne
-                          </span>
-                        )}
-                      </td>
-                      {!verrouille && (
-                        <td>
-                          <button
-                            className="btn-link danger"
-                            onClick={() => handleSupprimerCharge(c.idLigne)}
-                          >
-                            Supprimer
-                          </button>
-                        </td>
-                      )}
-                    </tr>
-                  ))
-                )}
-              </tbody>
-              <tfoot>
-                <tr>
-                  <td colSpan={2} style={{ textAlign: 'right', fontWeight: 600 }}>
-                    Total charges
-                  </td>
-                  <td colSpan={verrouille ? 1 : 2} style={{ fontWeight: 700 }}>
-                    {fmt(totalChargesAffiche)} Ar
-                  </td>
-                </tr>
-              </tfoot>
-            </table>
-
+          <Card
+            size="small"
+            title={`Charges (${charges.length})`}
+            style={{ marginBottom: 16 }}
+            extra={<Statistic value={totalChargesAffiche} suffix="Ar" valueStyle={{ fontSize: 14 }} />}
+          >
+            <Table
+              rowKey="idLigne"
+              columns={colonnesCharges}
+              dataSource={charges}
+              pagination={false}
+              size="small"
+              locale={{ emptyText: 'Aucune charge' }}
+            />
             {!verrouille && (
-              <form onSubmit={handleAjouterCharge} className="inline-form">
-                <select
-                  className="form-input"
-                  value={newCat}
-                  onChange={(e) => {
-                    setNewCat(e.target.value);
-                    if (e.target.value !== 'AUTRE') setNewCategorieLibre('');
-                  }}
-                >
-                  {CATEGORIES.map((c) => (
-                    <option key={c.value} value={c.value}>{c.label}</option>
-                  ))}
-                </select>
-
-                {newCat === 'AUTRE' && (
-                  <input
-                    className="form-input"
-                    placeholder="Precisez (ex: Fournitures)"
-                    value={newCategorieLibre}
-                    onChange={(e) => setNewCategorieLibre(e.target.value)}
-                    maxLength={50}
+              <Row gutter={[8, 8]} style={{ marginTop: 12 }}>
+                <Col xs={24} sm={6}>
+                  <Select
+                    value={nouvelleCharge.categorie}
+                    onChange={(v) =>
+                      setNouvelleCharge((s) => ({
+                        ...s,
+                        categorie: v,
+                        categorieLibre: v === 'AUTRE' ? s.categorieLibre : '',
+                      }))
+                    }
+                    options={CATEGORIES}
+                    style={{ width: '100%' }}
                   />
+                </Col>
+                {nouvelleCharge.categorie === 'AUTRE' && (
+                  <Col xs={24} sm={6}>
+                    <Input
+                      placeholder="Precisez (ex: Fournitures)"
+                      maxLength={50}
+                      value={nouvelleCharge.categorieLibre}
+                      onChange={(e) =>
+                        setNouvelleCharge((s) => ({ ...s, categorieLibre: e.target.value }))
+                      }
+                    />
+                  </Col>
                 )}
-
-                <input
-                  type="number"
-                  className="form-input"
-                  placeholder="Montant (Ar)"
-                  value={newMontant}
-                  onChange={(e) => setNewMontant(e.target.value)}
-                  min={0}
-                />
-                <input
-                  className="form-input"
-                  placeholder="N facture"
-                  value={newJustif}
-                  onChange={(e) => setNewJustif(e.target.value)}
-                />
-                <button type="submit" className="btn-primary">+ Ajouter</button>
-              </form>
+                <Col xs={24} sm={6}>
+                  <InputNumber
+                    placeholder="Montant (Ar) *"
+                    min={0}
+                    required
+                    status={
+                      tentativeAjout && (nouvelleCharge.montant == null || Number(nouvelleCharge.montant) <= 0)
+                        ? 'error'
+                        : ''
+                    }
+                    style={{ width: '100%' }}
+                    value={nouvelleCharge.montant}
+                    onChange={(v) => setNouvelleCharge((s) => ({ ...s, montant: v }))}
+                    addonAfter="Ar"
+                  />
+                </Col>
+                <Col xs={24} sm={4}>
+                  <Input
+                    placeholder="N facture *"
+                    required
+                    maxLength={40}
+                    status={tentativeAjout && !nouvelleCharge.justificatif?.trim() ? 'error' : ''}
+                    value={nouvelleCharge.justificatif}
+                    onChange={(e) =>
+                      setNouvelleCharge((s) => ({ ...s, justificatif: e.target.value }))
+                    }
+                  />
+                </Col>
+                <Col xs={24} sm={2} style={{ display: 'flex' }}>
+                  <Button type="primary" icon={<PlusOutlined />} block onClick={handleAjouterCharge}>
+                    Ajouter
+                  </Button>
+                </Col>
+              </Row>
             )}
-          </div>
+          </Card>
 
-          <div className="form-panel" style={{ marginBottom: 16 }}>
-            <h3 className="section-title">Mois actifs (arret d activite)</h3>
-            <div className="form-row">
-              <div className="form-group" style={{ flex: 2 }}>
-                <label className="form-label">Mois actifs (0 a 12)</label>
-                <input
-                  type="number"
-                  className="form-input"
-                  value={moisActifs}
-                  onChange={(e) => setMoisActifs(e.target.value)}
-                  disabled={verrouille}
-                  min={0}
-                  max={12}
-                />
-                <p className="page-sub" style={{ marginTop: 4 }}>
-                  Le minimum de perception est proratise : part fixe x mois actifs / 12.
-                </p>
-              </div>
+          <Card size="small" title="Mois actifs (arret d activite)">
+            <Space.Compact style={{ width: '100%', maxWidth: 420 }}>
+              <InputNumber
+                value={moisActifs}
+                onChange={(v) => setMoisActifs(v ?? 0)}
+                min={0}
+                max={12}
+                disabled={verrouille}
+                style={{ width: 140 }}
+              />
               {!verrouille && (
-                <div className="form-group" style={{ flex: 0, justifyContent: 'flex-end' }}>
-                  <button className="btn-secondary" onClick={handleSauverMoisActifs}>
-                    Enregistrer mois actifs
-                  </button>
-                </div>
+                <Button icon={<SaveOutlined />} onClick={handleSauverMoisActifs}>
+                  Enregistrer
+                </Button>
               )}
-            </div>
+            </Space.Compact>
+            <Text type="secondary" style={{ display: 'block', marginTop: 8 }}>
+              Le minimum de perception est proratise : part fixe x mois actifs / 12.
+            </Text>
+          </Card>
+        </Col>
+
+        <Col xs={24} lg={9}>
+          <div style={{ position: 'sticky', top: 16 }}>
+            <Card
+              size="small"
+              title="Resultat du calcul — 12 etapes"
+              style={{ marginBottom: 16 }}
+            >
+              <Steps
+                direction="vertical"
+                size="small"
+                current={-1}
+                items={etapesResultat.map((e) => ({
+                  title: (
+                    <span
+                      style={{
+                        fontWeight: e.fort || e.final ? 700 : 500,
+                        color: e.final ? (e.solde ? '#cf1322' : e.credit ? '#0e7a55' : undefined) : undefined,
+                      }}
+                    >
+                      {e.label}
+                    </span>
+                  ),
+                  description: (
+                    <Text
+                      strong={e.fort || e.final}
+                      style={{
+                        fontSize: e.final ? 16 : 14,
+                        color: e.final
+                          ? e.solde
+                            ? '#cf1322'
+                            : e.credit
+                              ? '#0e7a55'
+                              : undefined
+                          : undefined,
+                      }}
+                    >
+                      {e.valeur}
+                    </Text>
+                  ),
+                  status: 'finish',
+                }))}
+              />
+
+              <Descriptions
+                column={1}
+                size="small"
+                style={{ marginTop: 12 }}
+                items={[
+                  {
+                    key: 'pen',
+                    label: 'Penalites dues',
+                    children: formatAr(penalites),
+                  },
+                  {
+                    key: 'premier',
+                    label: '1er acompte N+1',
+                    children: formatAr(premierAcompte),
+                  },
+                  {
+                    key: 'acomp',
+                    label: 'Acomptes verses',
+                    children: formatAr(acomptesVerses),
+                  },
+                ]}
+              />
+
+              {!verrouille && (
+                <Space direction="vertical" style={{ width: '100%', marginTop: 16 }}>
+                  <Button
+                    type="primary"
+                    block
+                    icon={<CalculatorOutlined />}
+                    loading={loading}
+                    onClick={handleCalculer}
+                  >
+                    Calculer l impot
+                  </Button>
+                  <Space wrap style={{ width: '100%' }}>
+                    <Button
+                      icon={<SaveOutlined />}
+                      loading={enregistrementBrouillon}
+                      onClick={handleEnregistrerBrouillon}
+                    >
+                      Enregistrer en brouillon
+                    </Button>
+                    <Button
+                      icon={<CheckCircleOutlined />}
+                      style={{
+                        background: '#0e7a55',
+                        borderColor: '#0e7a55',
+                        color: '#fff',
+                      }}
+                      onClick={handleValider}
+                    >
+                      Valider la declaration
+                    </Button>
+                  </Space>
+                </Space>
+              )}
+            </Card>
           </div>
-
-          <div className="form-panel">
-            <h3 className="section-title">Ajustements et acomptes</h3>
-            <div className="form-row">
-              <div className="form-group">
-                <label className="form-label">Reintegrations (Ar)</label>
-                <input
-                  type="number"
-                  className="form-input"
-                  value={reintegrations}
-                  onChange={(e) => setReintegrations(e.target.value)}
-                  disabled={verrouille}
-                  min={0}
-                />
-              </div>
-              <div className="form-group">
-                <label className="form-label">Deductions (Ar)</label>
-                <input
-                  type="number"
-                  className="form-input"
-                  value={deductions}
-                  onChange={(e) => setDeductions(e.target.value)}
-                  disabled={verrouille}
-                  min={0}
-                />
-              </div>
-              <div className="form-group">
-                <label className="form-label">Acomptes verses (Ar)</label>
-                <input
-                  type="number"
-                  className="form-input"
-                  value={acomptes}
-                  onChange={(e) => setAcomptes(e.target.value)}
-                  disabled={verrouille}
-                  min={0}
-                />
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div>
-          <div className="result-panel">
-            <h3 className="result-title">Resultat du calcul</h3>
-
-            <div className="result-line">
-              <span>Resultat comptable</span>
-              <strong>{fmt(declaration.resultatComptable)} Ar</strong>
-            </div>
-            <div className="result-line">
-              <span>Total reintegrations</span>
-              <strong>{fmt(declaration.totalReintegrations)} Ar</strong>
-            </div>
-            <div className="result-line">
-              <span>Total deductions</span>
-              <strong>{fmt(declaration.totalDeductions)} Ar</strong>
-            </div>
-            <div className="result-line">
-              <span>Deficit impute</span>
-              <strong>{fmt(declaration.deficitImpute)} Ar</strong>
-            </div>
-            <div className="result-line">
-              <span>Base imposable</span>
-              <strong>{fmt(declaration.baseImposable)} Ar</strong>
-            </div>
-            <div className="result-line">
-              <span>IR brut ({declaration.tauxIr == null ? 20 : Number(declaration.tauxIr)} %)</span>
-              <strong>{fmt(declaration.irBrut)} Ar</strong>
-            </div>
-            <div className="result-line">
-              <span>Minimum de perception</span>
-              <strong>{fmt(declaration.minimumPerception)} Ar</strong>
-            </div>
-            <div className="result-line highlight">
-              <span>IR du</span>
-              <strong>{fmt(declaration.irDu)} Ar</strong>
-            </div>
-            <div className="result-line">
-              <span>Acomptes verses</span>
-              <strong>{fmt(declaration.acomptesVerses)} Ar</strong>
-            </div>
-            {declaration.soldeAPayer > 0 ? (
-              <div className="result-line big">
-                <span>Solde a payer</span>
-                <strong>{fmt(declaration.soldeAPayer)} Ar</strong>
-              </div>
-            ) : declaration.creditImpot > 0 ? (
-              <div className="result-line big credit">
-                <span>Credit d impot</span>
-                <strong>{fmt(declaration.creditImpot)} Ar</strong>
-              </div>
-            ) : null}
-          </div>
-
-          {!verrouille && (
-            <div className="form-panel" style={{ marginTop: 16 }}>
-              <button
-                className="btn-primary full-width"
-                onClick={handleCalculer}
-                disabled={loading}
-              >
-                {loading ? 'Calcul en cours...' : 'Calculer l impot'}
-              </button>
-              <button
-                className="btn-validate full-width"
-                onClick={handleValider}
-                style={{ marginTop: 10 }}
-              >
-                Valider la declaration
-              </button>
-            </div>
-          )}
-        </div>
-      </div>
+        </Col>
+      </Row>
 
       <ConfirmDialog
         ouvert={!!confirm}
